@@ -1,19 +1,25 @@
-#!/usr/bin/env bash
+#!/bin/bash
 
-[[ -n $DEBUG ]] && set -x
+set -x
 set -o errtrace         # Make sure any error trap is inherited
 set -o nounset          # Disallow expansion of unset variables
 set -o pipefail         # Use last non-zero exit code in a pipeline
 
-ID=`whoami`
+echo "" > /var/log/nac_install.log
+exec > >(tee -a /var/log/nac_install.log) 2>&1
 
-if [[ "$ID" != "root" ]]; then
-	echo "You must be root for install"
-	exit
+FACTORYINSTALL="${FACTORYINSTALL:-0}"
+
+if [[ "x$FACTORYINSTALL" != "x1" ]]; then
+	ID=`whoami`
+
+	if [[ "$ID" != "root" ]]; then
+		echo "You must be root for install"
+		exit
+	fi
 fi
 
 TMP_DIR="$(rm -rf /tmp/upgrade* && mktemp -d -t upgrade.XXXXXXXXXX)"
-LOG_FILE="${TMP_DIR}/install.log"
 
 export DEBIAN_FRONTEND=noninteractive
 
@@ -46,11 +52,13 @@ apt -y install lsof ${DPKGCONFOPT}
 apt -y install net-tools ${DPKGCONFOPT}
 apt -y install lsb-release
 
-# check dpkg lock
-PKGLOCK=`lsof /var/lib/dpkg/lock`
-if [[ "x$PKGLOCK" != "x" ]]; then
-	echo "Could not get lock /var/lib/dpkg/lock"
-	exit
+if [[ "x$FACTORYINSTALL" != "x1" ]]; then
+	# check dpkg lock
+	PKGLOCK=`lsof /var/lib/dpkg/lock`
+	if [[ "x$PKGLOCK" != "x" ]]; then
+		echo "Could not get lock /var/lib/dpkg/lock"
+		exit
+	fi
 fi
 
 KERNEL="5.4.0-186-generic"
@@ -62,11 +70,6 @@ CENABLEPASSWORD="/disk/sys/conf/CENABLEPASSWORD"
 UDEVRULE="/etc/udev/rules.d/70-persistent-net.rules"
 LDCONFNAC="aaa-genian-nac.conf"
 
-function log::exec() {
-  printf "[%s]: \033[34mEXEC:    \033[0m%s\n" "$(date +'%Y-%m-%dT%H:%M:%S.%N%z')" "$*" >> "$LOG_FILE"
-}
-
-
 function utils::quote() {
   	if [ $(echo "$*" | tr -d "\n" | wc -c) -eq 0 ]; then
     	echo "''"
@@ -75,16 +78,6 @@ function utils::quote() {
   	else
     	echo "$*"
   	fi
-}
-
-
-function command::exec() {
-	local command="$*"
-	command="$(utils::quote "$command")"
-    log::exec "[command]" "bash -c $(printf "%s" "${command}")"
-	COMMAND_OUTPUT=$(eval bash -c "${command}" 2>> "$LOG_FILE" | tee -a "$LOG_FILE")
-    local status=$?
-    return $status
 }
 
 function util::getcodename()
@@ -904,6 +897,8 @@ while [ "${1:-}" != "" ]; do
     -timezone )     shift
                     TIMEZONE=${1:-$TIMEZONE}
                     ;;
+    -noprompt )     PROMPT=0
+                    ;;
     -localmirror )  LOCAL_MIRROR=1
                     ;;
     -repomirror )   shift
@@ -966,8 +961,10 @@ unhold::package
 clean::pkg
 clean::apt
 
-# sourcelist 를 초기화 한다. bionic 에서 시작
-init::sourcelist
+if [[ "x$FACTORYINSTALL" != "x1" ]]; then
+	# sourcelist 를 초기화 한다. bionic 에서 시작
+	init::sourcelist
+fi
 
 # 현재 운영체제에 따라서 sourcelist 변경
 if [[ "x$CODENAME" == "xfocal" ]]; then
