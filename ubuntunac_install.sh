@@ -1,12 +1,21 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
-set -x
+[[ -n $DEBUG ]] && set -x
 set -o errtrace         # Make sure any error trap is inherited
 set -o nounset          # Disallow expansion of unset variables
 set -o pipefail         # Use last non-zero exit code in a pipeline
 
-echo "" > /var/log/nac_install.log
-exec > >(tee -a /var/log/nac_install.log) 2>&1
+RED='\033[0;31m'
+BLU='\033[0;34m'
+NC='\033[0m' # No Color
+
+function util::error() {
+	echo -e "${RED}ERR: $1${NC}" >&2
+}
+
+function util::info() {
+	echo -e "${BLU}INF: $1${NC}"
+}
 
 FACTORYINSTALL="${FACTORYINSTALL:-0}"
 
@@ -14,19 +23,30 @@ if [[ "x$FACTORYINSTALL" != "x1" ]]; then
 	ID=`whoami`
 
 	if [[ "$ID" != "root" ]]; then
-		echo "You must be root for install"
+		util::error "You must be root for install."
 		exit
 	fi
+else
+	PROMPT=0
 fi
+
+LOGFILE=/var/log/nac_install.log
+echo "" > $LOGFILE
+exec > >(tee -a $LOGFILE) 2>&1
 
 TMP_DIR="$(rm -rf /tmp/upgrade* && mktemp -d -t upgrade.XXXXXXXXXX)"
 
 export DEBIAN_FRONTEND=noninteractive
 
+DEF_DNSSERVER=
+DEF_GATEWAY=
+ETH_INTERFACES=
+ALT_INTERFACES=
+KERNEL_FLAVOR=`uname -r | awk -F'-' '{print $3}'`
+[ "x$KERNEL_FLAVOR" = "x" ] && KERNEL_FLAVOR="none"
 PROMPT="${PROMPT:-1}"
 DPKGCONFOPT="-o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold"
 REL="${REL:-$(awk -F'=' '/UBUNTU_CODENAME/ {print $2}' /etc/os-release)}"
-CODENAME=""
 PLATFORM_ARCH=$(arch)
 LOCAL_MIRROR="${LOCAL_MIRROR:-}"
 ROOT_MIRROR="${ROOT_MIRROR:-}"
@@ -46,39 +66,38 @@ SSHALLALLOW="${SSHALLALLOW:-}"
 KERNELUP="${KERNELUP:-}"
 NETDRV="${NETDRV:-}"
 
-apt update
-#apt -y upgrade
-apt -y install lsof ${DPKGCONFOPT}
-apt -y install net-tools ${DPKGCONFOPT}
-apt -y install lsb-release
-
-if [[ "x$FACTORYINSTALL" != "x1" ]]; then
-	# check dpkg lock
-	PKGLOCK=`lsof /var/lib/dpkg/lock`
-	if [[ "x$PKGLOCK" != "x" ]]; then
-		echo "Could not get lock /var/lib/dpkg/lock"
-		exit
-	fi
+if [[ "x$KERNEL_FLAVOR" == "xaws" || "x$KERNEL_FLAVOR" == "xazure" ]]; then
+	SSHALLALLOW=1
+	SSHPORT=22
+	#KERNELUP=no
 fi
 
-KERNEL="5.4.0-186-generic"
+if [[ "x$KERNEL_FLAVOR" == "xazure" ]]; then
+	NETDRV=hv_netvsc
+fi
+
+function util::install_packages()
+{
+	packages=("$@")
+	for package in "${packages[@]}"; do
+		util::info "Install... $package"
+		if ! apt-get install -y "$package" ${DPKGCONFOPT} >> $LOGFILE 2>&1; then
+			util::error "Error: Failed to install $package"
+			apt-get install -y "$package" 2>&1 | tee -a "$LOGFILE" | grep -E "^E:" | while read -r line ; do
+				util::error "${line}"
+			done
+			exit 1
+		fi
+	done
+}
+
 PERCONA_VERSION="8.0.37-29-1"
-FILEBEAT_VERSION="7.17.7"
+FILEBEAT_VERSION="6.8.6"
 ELASTIC_VERSION="6.8.6"
 LOCALCONF="/disk/sys/conf/local.conf"
 CENABLEPASSWORD="/disk/sys/conf/CENABLEPASSWORD"
 UDEVRULE="/etc/udev/rules.d/70-persistent-net.rules"
 LDCONFNAC="aaa-genian-nac.conf"
-
-function utils::quote() {
-  	if [ $(echo "$*" | tr -d "\n" | wc -c) -eq 0 ]; then
-    	echo "''"
-  	elif [ $(echo "$*" | tr -d "[a-z][A-Z][0-9]:,.=~_/\n-" | wc -c) -gt 0 ]; then
-    	printf "%s" "$*" | sed -e "1h;2,\$H;\$!d;g" -e "s/'/\'\"\'\"\'/g" | sed -e "1h;2,\$H;\$!d;g" -e "s/^/'/g" -e "s/$/'/g"
-  	else
-    	echo "$*"
-  	fi
-}
 
 function util::getcodename()
 {
@@ -87,7 +106,7 @@ function util::getcodename()
 
 function util::setbash()
 {
-	rm -v /bin/sh
+	rm -v /bin/sh > /dev/null 2>&1
 	ln -s /bin/bash /bin/sh
 }
 
@@ -109,9 +128,9 @@ function install::basepkg()
 	systemctl mask snmpd snmptrapd apache2 ipsec strongswan-starter mysql elasticsearch winbind smbd \
 		samba-ad-dc nmbd tomcat8 tomcat9 tomcat10 syslog-ng nfs-server samba nmb > /dev/null 2>&1
 
-	apt update
+	apt-get update > /dev/null 2>&1
 
-	apt -y install vim dialog libpam-pwquality traceroute \
+	util::install_packages vim dialog libpam-pwquality traceroute \
 		wget gnupg2 debsums libnuma1 psmisc curl libmecab2 cabextract \
 		dnsutils tcpdump strace gftp python3-pip lsof jq \
 		gdb systemd-coredump udhcpc libreadline-dev \
@@ -121,33 +140,27 @@ function install::basepkg()
 		bridge-utils dmidecode \
 		nmap ntpdate net-tools libc-ares2 lrzsz \
 		sysstat libtalloc2 iproute2 ansible \
-		httrack lsb-release ${DPKGCONFOPT}
+		httrack lsb-release ca-certificates
 
 	if [[ "x$CODENAME" == "xnoble" ]]; then
-		apt -y install libaio1t64 libtirpc-dev libncurses6 libtinfo6 libpcre3-dev libpcap0.8t64 libjsoncpp25 libldap2 ${DPKGCONFOPT}
+		util::install_packages util-linux-extra libaio1t64 libtirpc-dev libncurses6 libtinfo6 libpcre3-dev libpcap0.8t64 libjsoncpp25 libldap2
 	elif [[ "x$CODENAME" == "xjammy" ]]; then
-		apt -y install libaio1 dpkg-sig libncurses5 libpcap0.8 libjsoncpp25 libldap-2.5-0 ${DPKGCONFOPT}
+		util::install_packages libaio1 dpkg-sig libncurses5 libpcap0.8 libjsoncpp25 libldap-2.5-0
 	else
-		apt -y install libaio1 dpkg-sig libncurses5 libpcap0.8 libjsoncpp1 libldap-2.4-2 ${DPKGCONFOPT}
-	fi
-
-	if [[ "x$KERNELUP" != "xno" ]]; then
-		if [[ "x$PLATFORM_ARCH" == "xx86_64" ]]; then
-			apt -y install linux-image-${KERNEL} ${DPKGCONFOPT}
-		fi
+		util::install_packages libaio1 dpkg-sig libncurses5 libpcap0.8 libjsoncpp1 libldap-2.4-2
 	fi
 
 	if [[ "x$CODENAME" == "xbionic" ]]; then
-		apt -y install libsnmp30 ${DPKGCONFOPT}
+		util::install_packages libsnmp30
 	fi
 	if [[ "x$CODENAME" == "xfocal" ]]; then
-		apt -y install libsnmp35 ${DPKGCONFOPT}
+		util::install_packages libsnmp35
 	fi
 	if [[ "x$CODENAME" == "xjammy" ]]; then
-		apt -y install libsnmp40 ${DPKGCONFOPT}
+		util::install_packages libsnmp40
 	fi
 	if [[ "x$CODENAME" == "xnoble" ]]; then
-		apt -y install libsnmp40t64 ${DPKGCONFOPT}
+		util::install_packages libsnmp40t64
 	fi
 
 	echo "krb5-config krb5-config/add_servers_realm string TESTDOMAIN" | debconf-set-selections
@@ -156,17 +169,21 @@ function install::basepkg()
 	echo "krb5-config krb5-config/admin_server string kdc" | debconf-set-selections
 
 	if [[ "$TARGET" == "GPC" ]]; then
-		apt -y install nfs-kernel-server ldap-utils pigz samba winbind krb5-user libcommons-dbcp-java \
+		util::install_packages nfs-kernel-server ldap-utils pigz samba winbind krb5-user libcommons-dbcp-java \
 			rrdtool libexpat1 libltdl7 libsybdb5 libpq5 \
-			unixodbc-dev apt-transport-https fonts-nanum ${DPKGCONFOPT}
+			unixodbc-dev apt-transport-https fonts-nanum
 		if [[ "x$CODENAME" == "xnoble" ]]; then
-			apt -y install libapr1t64 libaprutil1t64 libodbc2 ${DPKGCONFOPT}
+			util::install_packages libapr1t64 libaprutil1t64 libodbc2
 			# 24.04 awscli
-			wget -4 --no-check-certificate https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip -O ${TMP_DIR}/awscliv2.zip
-			unzip ${TMP_DIR}/awscliv2.zip -d ${TMP_DIR}
-			sudo ${TMP_DIR}/aws/install
+			wget -q --show-progress -4 --no-check-certificate https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip -O ${TMP_DIR}/awscliv2.zip > /dev/null 2>&1
+			unzip -oq ${TMP_DIR}/awscliv2.zip -d ${TMP_DIR} > /dev/null 2>&1
+			${TMP_DIR}/aws/install > /dev/null 2>&1
+			if ! which aws > /dev/null 2>&1; then
+				util::error "awscli install failed."
+				exit -1
+			fi
 		else
-			apt -y install libapr1 libaprutil1 awscli libodbc1 ${DPKGCONFOPT}
+			util::install_packages libapr1 libaprutil1 awscli libodbc1
 		fi
 	fi
 
@@ -185,79 +202,86 @@ function install::basepkg()
 	# 기본 bond 인터페이스 생성
 	#echo -e "  bonds:\n    bond0:\n      dhcp4: no" >> /etc/netplan/01-netcfg.yaml
 
-	systemctl unmask unattended-upgrades
+	systemctl unmask unattended-upgrades > /dev/null 2>&1
 	# 자동 설치 서비스 비활성화
-	systemctl stop unattended-upgrades
-	systemctl disable unattended-upgrades
-	apt -y purge --auto-remove unattended-upgrades
-	systemctl stop apt-daily-upgrade.timer
-	systemctl disable apt-daily-upgrade.timer
-	systemctl mask apt-daily-upgrade.service
-	systemctl stop apt-daily.timer
-	systemctl disable apt-daily.timer
-	systemctl mask apt-daily.service
+	systemctl stop unattended-upgrades > /dev/null 2>&1
+	systemctl disable unattended-upgrades > /dev/null 2>&1
+	apt -y purge --auto-remove unattended-upgrades > /dev/null 2>&1
+	systemctl stop apt-daily-upgrade.timer > /dev/null 2>&1
+	systemctl disable apt-daily-upgrade.timer > /dev/null 2>&1
+	systemctl mask apt-daily-upgrade.service > /dev/null 2>&1
+	systemctl stop apt-daily.timer > /dev/null 2>&1
+	systemctl disable apt-daily.timer > /dev/null 2>&1
+	systemctl mask apt-daily.service > /dev/null 2>&1
+	systemctl disable apt-daily.timer > /dev/null 2>&1
+	systemctl disable apt-daily.service > /dev/null 2>&1
+	systemctl disable apt-daily-upgrade.timer > /dev/null 2>&1
+	systemctl disable apt-daily-upgrade.service > /dev/null 2>&1
+	systemctl stop apt-daily.timer > /dev/null 2>&1
+	systemctl stop apt-daily.service > /dev/null 2>&1
+	systemctl stop apt-daily-upgrade.timer > /dev/null 2>&1
+	systemctl stop apt-daily-upgrade.service > /dev/null 2>&1
 }
 
 function install::nacpkg()
 {
-	apt update
+	apt-get update > /dev/null 2>&1
 
-	apt -y install snmptrapd snmpd snmp ${DPKGCONFOPT}
+	util::install_packages snmptrapd snmpd snmp
 
-	systemctl disable snmpd snmptrapd
+	systemctl disable snmpd snmptrapd > /dev/null 2>&1
 
-	apt -y install apache2 libapache2-mod-security2 libapache2-mod-qos ${DPKGCONFOPT}
+	util::install_packages apache2 libapache2-mod-security2 libapache2-mod-qos
 
-	if [[ "$CODENAME" == "xfocal" || "$CODENAME" == "xjammy" || "$CODENAME" == "xnoble" ]]; then
-		apt -y install strongswan ${DPKGCONFOPT}
-	fi
+	util::install_packages strongswan
 
 	if [[ "$TARGET" == "GPC" ]]; then
-		apt -y install libapache2-mod-jk ${DPKGCONFOPT}
+		util::install_packages libapache2-mod-jk
 	fi
 	# enable apache module
-	a2enmod ssl
-	a2enmod rewrite
-	a2enmod proxy
-	a2enmod proxy_http
-	a2enmod cache
-	a2enmod cache_disk
-	a2enmod headers
-	a2enmod remoteip
-	a2dismod mpm_event
-	a2enmod mpm_worker
-	a2enmod qos
+	a2enmod ssl > /dev/null
+	a2enmod rewrite > /dev/null
+	a2enmod proxy > /dev/null
+	a2enmod proxy_http > /dev/null
+	a2enmod cache > /dev/null
+	a2enmod cache_disk > /dev/null
+	a2enmod headers > /dev/null
+	a2enmod remoteip > /dev/null
+	a2dismod mpm_event > /dev/null
+	a2enmod mpm_worker > /dev/null
+	a2enmod qos > /dev/null
+	a2enmod proxy_connect > /dev/null
 
 	if [[ "$TARGET" != "GPC" ]]; then
-		systemctl unmask apache2
+		systemctl unmask apache2 > /dev/null 2>&1
 		return 0
 	fi
 
 	# 설치하자마자 실행되는것을 방지하기 위해 mask
-	systemctl mask apache2
-	systemctl mask mysql
-	systemctl mask tomcat9
-	systemctl mask tomcat8
-	systemctl mask tomcat10
-	systemctl mask elasticsearch
-	systemctl mask winbind
-	systemctl mask smbd
-	systemctl mask samba-ad-dc
-	systemctl mask nmbd
-	systemctl mask nmb
-	systemctl mask samba
+	systemctl mask apache2 > /dev/null 2>&1
+	systemctl mask mysql > /dev/null 2>&1
+	systemctl mask tomcat9 > /dev/null 2>&1
+	systemctl mask tomcat8 > /dev/null 2>&1
+	systemctl mask tomcat10 > /dev/null 2>&1
+	systemctl mask elasticsearch > /dev/null 2>&1
+	systemctl mask winbind > /dev/null 2>&1
+	systemctl mask smbd > /dev/null 2>&1
+	systemctl mask samba-ad-dc > /dev/null 2>&1
+	systemctl mask nmbd > /dev/null 2>&1
+	systemctl mask nmb > /dev/null 2>&1
+	systemctl mask samba > /dev/null 2>&1
 
 	if [[ "x$CODENAME" == "xbionic" ]]; then
-		apt -y install tomcat8 libmysql-java libmysqlclient20 libjemalloc1 ${DPKGCONFOPT}
+		util::install_packages tomcat8 libmysql-java libmysqlclient20 libjemalloc1
 	fi
 	if [[ "x$CODENAME" == "xfocal" || "x$CODENAME" == "xjammy" ]]; then
-		apt -y install libmariadb-java libmysqlclient21 libjemalloc2 ${DPKGCONFOPT}
+		util::install_packages libmariadb-java libmysqlclient21 libjemalloc2
 	fi
 	if [[ "x$CODENAME" == "xnoble" ]]; then
-		apt -y install libmariadb-java libmysqlclient21 libjemalloc2 ${DPKGCONFOPT}
+		util::install_packages libmariadb-java libmysqlclient21 libjemalloc2
 	fi
 
-	apt -y install libnuma1 psmisc mysql-common libmecab2 zlib1g debsums ${DPKGCONFOPT}
+	util::install_packages libnuma1 psmisc mysql-common libmecab2 zlib1g debsums
 
 	echo "percona-server-server percona-server-server/root-pass password" | debconf-set-selections
 	echo "percona-server-server percona-server-server/re-root-pass password" | debconf-set-selections
@@ -276,44 +300,42 @@ function install::nacpkg()
 		wget -4 --no-check-certificate ${PS_DOWNLOADURL}/percona-server-server_8.0.18-9-1.bionic_amd64.deb -O ${TMP_DIR}/percona-server-server_8.0.18-9-1.bionic_amd64.deb
 		dpkg -i ${TMP_DIR}/percona-server-server_8.0.18-9-1.bionic_amd64.deb
 	elif [[ "x$CODENAME" == "xfocal" || "x$CODENAME" == "xjammy" ]]; then
-		apt -y install libgflags2.2
-		apt -y install libperconaserverclient21=${PERCONA_VERSION}.${CODENAME} \
-			percona-server-server=${PERCONA_VERSION}.${CODENAME} \
+		util::install_packages libgflags2.2
+		util::install_packages percona-server-common=${PERCONA_VERSION}.${CODENAME} libperconaserverclient21=${PERCONA_VERSION}.${CODENAME} \
 			percona-server-client=${PERCONA_VERSION}.${CODENAME} \
-			percona-server-common=${PERCONA_VERSION}.${CODENAME} ${DPKGCONFOPT}
+			percona-server-server=${PERCONA_VERSION}.${CODENAME}
 	elif [[ "x$CODENAME" == "xnoble" ]]; then
 		apt remove -y libperconaserverclient* percona-server* --allow-change-held-packages > /dev/null 2>&1
 		ln -s libaio.so.1t64.0.2 /lib/x86_64-linux-gnu/libaio.so.1 > /dev/null 2>&1
 
-		apt -y install libperconaserverclient21=${PERCONA_VERSION}.${CODENAME} \
-			percona-server-server=${PERCONA_VERSION}.${CODENAME} \
+		util::install_packages percona-server-common=${PERCONA_VERSION}.${CODENAME} libperconaserverclient21=${PERCONA_VERSION}.${CODENAME} \
 			percona-server-client=${PERCONA_VERSION}.${CODENAME} \
-			percona-server-common=${PERCONA_VERSION}.${CODENAME} ${DPKGCONFOPT}
+			percona-server-server=${PERCONA_VERSION}.${CODENAME}
 
-		apt remove -y libperconaserverclient21 --allow-change-held-packages > /dev/null 2>&1
+		#apt remove -y libperconaserverclient21 --allow-change-held-packages > /dev/null 2>&1
 	fi
 
 	if [[ "x$CODENAME" == "xfocal" || "x$CODENAME" == "xjammy" || "x$CODENAME" == "xnoble" ]]; then
-		systemctl disable filebeat
-		systemctl mask filebeat
-		apt -y install filebeat=${FILEBEAT_VERSION} ${DPKGCONFOPT}
+		systemctl disable filebeat > /dev/null 2>&1
+		systemctl mask filebeat > /dev/null 2>&1
+		util::install_packages filebeat=${FILEBEAT_VERSION}
 	fi
 
-	apt update
+	apt-get update > /dev/null 2>&1
 
 	if [[ "x$CODENAME" == "xfocal" || "x$CODENAME" == "xjammy" || "x$CODENAME" == "xnoble" ]]; then
 		# Java 17
-		apt -y install openjdk-17-jre-headless ${DPKGCONFOPT}
+		util::install_packages openjdk-17-jre-headless
 		update-alternatives --set java /usr/lib/jvm/java-17-openjdk-amd64/bin/java
 	else
 		# Java 11
-		apt -y install openjdk-11-jre-headless ${DPKGCONFOPT}
+		util::install_packages openjdk-11-jre-headless
 		update-alternatives --set java /usr/lib/jvm/java-11-openjdk-amd64/bin/java
 	fi
 
 	# Elastic 초기 설치는 6.x 버전
 	if [[ "x$(apt list --installed 2>/dev/null | grep elasticsearch)" == "x" ]]; then
-		apt -y install elasticsearch=${ELASTIC_VERSION} ${DPKGCONFOPT}
+		util::install_packages elasticsearch=${ELASTIC_VERSION}
 	fi
 
 	apt-mark hold elasticsearch
@@ -344,19 +366,28 @@ function upgrade::kernel()
 	local target=$1
 
 	#
-	apt update
+	apt-get update > /dev/null 2>&1
 
-	local aptkernel=`apt-cache search linux-image-${target} | awk -F ' ' '{print $1}'`
+	local aptkernel=`apt-cache search linux-image-${target}$ | awk -F ' ' '{print $1}'`
 
 	if [[ "x${aptkernel}" = "x" ]]; then
 		echo "UPGRADE::KERNEL. ${target} NOT FOUND."
 		return 0
 	fi
 
-	apt -y install ${aptkernel} ${DPKGCONFOPT}
+	util::install_packages ${aptkernel}
+	util::install_packages linux-modules-extra-${target}
+
+	OLDKERN=$(apt-mark showhold|grep linux-image|sed -ne 's/linux-image-//p')
+	for i in $OLDKERN; do
+		apt-mark unhold $OLDKERN > /dev/null 2>&1
+	done
+	apt-mark hold linux-image-$target linux-headers-$target linux-modules-extra-${target}
 
 	local grubmenu=`awk -F\' '/submenu / {print $4}' /boot/grub/grub.cfg | head -1`
-	local grubentry=`awk -F\' '/menuentry / {print $4}' /boot/grub/grub.cfg |grep ${target}|grep -v recovery`
+	local grubentry=`awk -F\' '/menuentry / {print $4}' /boot/grub/grub.cfg |grep ${target}|grep -v recovery|grep -v osprober`
+
+	echo "Changing GRUB_DEFAULT=${grubmenu}>${grubentry}"
 
 	if [[ "x${grubmenu}" = "x" || "x${grubentry}" = "x" ]]; then
 		echo "UPGRADE::KERNEL. GRUB NOT FOUND."
@@ -370,78 +401,73 @@ function upgrade::config()
 {
 	ln -s /usr/sbin/iptables /sbin/iptables > /dev/null 2>&1
 
-	if [[ "x$KERNELUP" != "xno" ]]; then
-		if [[ "x$PLATFORM_ARCH" == "xx86_64" ]]; then
-			# 부팅커널 변경
-			OLDKERN=$(apt-mark showhold|grep linux-image|sed -ne 's/linux-image-//p')
-			for i in $OLDKERN; do
-				apt-mark unhold $OLDKERN > /dev/null 2>&1
-			done
-			upgrade::kernel "${KERNEL}"
-			apt-mark hold linux-image-$KERNEL linux-headers-$KERNEL
-		fi
+	if [[ "$UPGRADE" == "1" ]]; then
+		return 0
 	fi
 
-	if [[ ! -f $LOCALCONF ]]; then
-		echo "root/admin123!" > /etc/account.conf
-		ADMIN=`cat /etc/account.conf | awk -F '/' '{print $1}'`
-		PASS=`cat /etc/account.conf | awk -F '/' '{print $2}'`
+	echo "root/admin123!" > /etc/account.conf
+	ADMIN=`cat /etc/account.conf | awk -F '/' '{print $1}'`
+	PASS=`cat /etc/account.conf | awk -F '/' '{print $2}'`
 
-		# local.conf 파일을 생성한다.
-		mkdir -p /disk/sys/conf
-		echo "" > $LOCALCONF
-		chown $ADMIN:$ADMIN $LOCALCONF
-		chmod 755 $LOCALCONF
+	# local.conf 파일을 생성한다.
+	mkdir -p /disk/sys/conf
+	: > $LOCALCONF
+	chown $ADMIN:$ADMIN $LOCALCONF
+	chmod 755 $LOCALCONF
 
-		touch $CENABLEPASSWORD
-		chown $ADMIN:$ADMIN $CENABLEPASSWORD
-		chmod 600 $CENABLEPASSWORD
+	touch $CENABLEPASSWORD
+	chown $ADMIN:$ADMIN $CENABLEPASSWORD
+	chmod 600 $CENABLEPASSWORD
 
-		CPASS=`echo -n $PASS | sha256sum | awk '{print $1}'`
-		echo "$ADMIN:$CPASS" > $CENABLEPASSWORD
+	CPASS=`echo -n $PASS | sha256sum | awk '{print $1}'`
+	echo "$ADMIN:$CPASS" > $CENABLEPASSWORD
 
-		# 현재 설치가 양산단계에서 진행되고 있음을 표시한다.
-		echo "install-point=factory" >> $LOCALCONF
+	# 현재 설치가 양산단계에서 진행되고 있음을 표시한다.
+	echo "install-point=factory" >> $LOCALCONF
 
-		if [[ "x$SSHPORT" != "x" ]]; then
-			echo "ssh_port=$SSHPORT" >> $LOCALCONF
-		fi
-		if [[ "x$SSHALLALLOW" != "x" ]]; then
-			echo "ssh_allallow=$SSHALLALLOW" >> $LOCALCONF
-		fi
+	if [[ "x$SSHPORT" != "x" ]]; then
+		echo "ssh_port=$SSHPORT" >> $LOCALCONF
 	fi
-    if [[ ! -f $UDEVRULE ]]; then
-        NUM=0
-        INTERFACES=`ip link | grep -E "eth[0-9]+.*:|ens[0-9]+.*:|eno[0-9]+.*:|enp[0-9]+.*:" | awk -F ': ' '{print $2}'`
-        touch $UDEVRULE
-        for interface in $INTERFACES; do
-            MAC=`ip link show $interface | grep link/ether | awk -F ' ' '{print $2}'`
-			RULE=""
-			if [[ "x$NETDRV" != "x" ]]; then
-            	RULE="SUBSYSTEM==\"net\", ACTION==\"add\", DRIVERS==\"$NETDRV\", ATTR{address}==\"$MAC\", ATTR{type}==\"1\", NAME=\"eth$NUM\""
-			else
-            	RULE="SUBSYSTEM==\"net\", ACTION==\"add\", DRIVERS==\"?*\", ATTR{address}==\"$MAC\", ATTR{type}==\"1\", NAME=\"eth$NUM\""
-			fi
-            echo $RULE >> $UDEVRULE
-            IP=`ifconfig $interface | grep -E 'inet ' | awk -F ' ' '{print $2}'`
-            if [[ "x$IP" != "x" ]]; then
-                NETMASK=`ifconfig $interface | grep -E 'inet ' | awk -F ' ' '{print $4}'`
-                ETH=eth$NUM
-                EXISTS=`cat $LOCALCONF | grep interface_${ETH}_address`
-                if [[ "x$EXISTS" == "x" ]]; then
-                    echo "interface_${ETH}_address=$IP $NETMASK" >> $LOCALCONF
-                fi
-                DEFGW=`ip route | grep -E "^default via [0-9]+.[0-9]+.[0-9]+.[0-9]+ dev $interface" | awk -F ' ' '{print $3}'`
-                if [[ "x$DEFGW" != "x" ]]; then
-                    DEFGWEXISTS=`cat $LOCALCONF | grep ip_default-gateway`
-                    if [[ "x$DEFGWEXISTS" == "x" ]]; then
-                        echo "ip_default-gateway=$DEFGW" >> $LOCALCONF
-                    fi
+	if [[ "x$SSHALLALLOW" != "x" ]]; then
+		echo "ssh_allallow=$SSHALLALLOW" >> $LOCALCONF
+	fi
+
+	: > $UDEVRULE
+    NUM=0
+    INTERFACES=`ip link | grep -iE "enx[0-9]+.*:|eth[0-9]+.*:|ens[0-9]+.*:|eno[0-9]+.*:|enp[0-9]+.*:" | grep -Ev "<.*SLAVE.*>|vlan|veth|dummy|bridge|bond|macvlan|macvtap|vxlan|ip6tnl|ipip|sit|gre|gretap|ip6gre|ip6gretap|vti|nlmon|ipvlan|lowpan|geneve|vrf|macsec|@" | awk -F ': ' '{print $2}'`
+    for interface in $INTERFACES; do
+        MAC=`ip link show $interface | grep link/ether | awk -F ' ' '{print $2}'`
+		RULE=""
+		if [[ "x$NETDRV" != "x" ]]; then
+        	RULE="SUBSYSTEM==\"net\", ACTION==\"add\", DRIVERS==\"$NETDRV\", ATTR{address}==\"$MAC\", ATTR{type}==\"1\", NAME=\"eth$NUM\""
+		else
+        	RULE="SUBSYSTEM==\"net\", ACTION==\"add\", DRIVERS==\"?*\", ATTR{address}==\"$MAC\", ATTR{type}==\"1\", NAME=\"eth$NUM\""
+		fi
+        echo $RULE >> $UDEVRULE
+		ETH_INTERFACES+="eth$NUM,"
+		ALT_INTERFACES+="$interface,"
+        IP=`ifconfig $interface | grep -E 'inet ' | awk -F ' ' '{print $2}'`
+        if [[ "x$IP" != "x" ]]; then
+            NETMASK=`ifconfig $interface | grep -E 'inet ' | awk -F ' ' '{print $4}'`
+            ETH=eth$NUM
+            EXISTS=`cat $LOCALCONF | grep interface_${ETH}_address`
+            if [[ "x$EXISTS" == "x" ]]; then
+                echo "interface_${ETH}_address=$IP $NETMASK" >> $LOCALCONF
+            fi
+            DEFGW=`ip route | grep -E "^default via [0-9]+.[0-9]+.[0-9]+.[0-9]+ dev $interface" | awk -F ' ' '{print $3}'`
+            if [[ "x$DEFGW" != "x" ]]; then
+                DEFGWEXISTS=`cat $LOCALCONF | grep ip_default-gateway`
+                if [[ "x$DEFGWEXISTS" == "x" ]]; then
+                    echo "ip_default-gateway=$DEFGW" >> $LOCALCONF
+					DEF_GATEWAY=$DEFGW
                 fi
             fi
-            NUM=$(( $NUM + 1 ))
-        done
-    fi
+        fi
+        NUM=$(( $NUM + 1 ))
+    done
+	ETH_INTERFACES="${ETH_INTERFACES%,}"
+	ALT_INTERFACES="${ALT_INTERFACES%,}"
+
 	if [[ "x$CODENAME" == "xfocal" || "x$CODENAME" == "xjammy" || "x$CODENAME" == "xnoble" ]]; then
     	NAMESERVER=`resolvectl dns | grep -E 'Link.*: [0-9]+.[0-9]+.[0-9]+.[0-9]' | awk -F ' ' '{print $4}'`
 	else
@@ -451,6 +477,7 @@ function upgrade::config()
         EXISTS=`cat $LOCALCONF | grep ip_name-server`
         if [[ "x$EXISTS" == "x" ]]; then
             echo "ip_name-server=$NAMESERVER" >> $LOCALCONF
+			DEF_DNSSERVER=$NAMESERVER
         fi
     fi
 }
@@ -460,7 +487,7 @@ function upgrade::nac()
 	if [[ "x$DOWNLOADTARGET" != "x" ]]; then
 		GDEB=$(/usr/bin/curl -w "%{filename_effective}" -sSkLO ${DOWNLOADTARGET})
 		DEBPKGCODENAME=`dpkg-deb --info $GDEB | grep Subarchitecture | awk -F ' ' '{print $2}'`
-		if [[ "$DEBPKGCODENAME" != "$CODENAME" ]]; then
+		if [[ "x$DEBPKGCODENAME" != "x" ]] && [[ "$DEBPKGCODENAME" != "$CODENAME" ]]; then
 			echo "Ubuntu CodeName error. $DEBPKGCODENAME != $CODENAME"
 			rm $GDEB
 			exit -1
@@ -476,7 +503,7 @@ function upgrade::nac()
 	ldconfig
 
 	if [[ "x$LOCALE" != "x" ]]; then
-		sed -Ei "s#system-locale.*#system-locale=${LOCALE}#g" $LOCALCONF
+		sed -Ei "s#system-locale.*#system-locale=${LOCALE}#g" $LOCALCONF > /dev/null 2>&1
 	fi
 	if [[ "x$TIMEZONE" != "x" ]]; then
 		timedatectl set-timezone ${TIMEZONE}
@@ -488,13 +515,71 @@ function upgrade::nac()
 	
 	[[ ! -d /disk/sys/conf/certs || ! -f /disk/sys/conf/certs/server.crt || ! -f /disk/sys/conf/certs/ssl.cer || ! -f /disk/data/custom/ssl.cer ]] && { rm -rf /disk/sys/conf/certs > /dev/null 2>&1; /etc/init.d/gensslkey; }
 
-	systemctl enable syslog-ng
+	systemctl enable syslog-ng > /dev/null 2>&1
 
 	ln -s /etc/apparmor.d/usr.sbin.mysqld /etc/apparmor.d/disable/ > /dev/null 2>&1
 	apparmor_parser -R /etc/apparmor.d/usr.sbin.mysqld > /dev/null 2>&1
 
 	#systemctl stop apparmor > /dev/null 2>&1
 	#systemctl disable apparmor > /dev/null 2>&1
+
+	if [[ "x$KERNELUP" == "xno" ]]; then
+		return
+	fi
+
+	# 커널업그레이드
+	# /usr/geni 에서 가장높은 커널버전 모듈을 찾아서 커널버전을 업그레이드
+
+	HOST_KERNELVER=$(uname -r)
+	NAC_KERNELVER=$(ls /usr/geni/nac_*${KERNEL_FLAVOR}.ko 2>/dev/null | sort -V | tail -n 1 | awk -F '_' '{print $2}' | sed 's/\.ko$//')
+
+	kvregex="^[0-9]+\.[0-9]+\.[0-9]+"
+	if  [[ ! $HOST_KERNELVER =~ $kvregex ]] || [[ ! "$NAC_KERNELVER" =~ $kvregex ]]; then
+		echo "Unknown kernel version format."
+		echo "  HOST=$HOST_KERNELVER"
+		echo "  NAC=$NAC_KERNELVER"
+		return
+	fi
+
+	if [ "x$HOST_KERNELVER" == "x$NAC_KERNELVER" ]; then
+		return
+	fi
+
+	echo "-------------------"
+	echo "Current kernel version: $HOST_KERNELVER"
+	echo "NAC supported kernel version: $NAC_KERNELVER"
+	echo "It will be install the kernel version."
+	echo "-------------------"
+
+	upgrade::kernel $NAC_KERNELVER
+
+	if [[ "$UPGRADE" == "1" ]]; then
+		return 0
+	fi
+
+	if [[ "x$FACTORYINSTALL" != "x1" ]]; then
+		export ETH_INTERFACES=$ETH_INTERFACES
+		export ALT_INTERFACES=$ALT_INTERFACES
+		export DEF_GATEWAY=$DEF_GATEWAY
+		export DEF_DNSSERVER=$DEF_DNSSERVER
+		/usr/geni/tools/initial_setup.sh
+	fi
+
+	# initial_setup 후에 local.conf 가 초기화 되었으므로 필요한 설정 추가
+
+	# 현재 설치가 양산단계에서 진행되고 있음을 표시한다.
+	FACTORYEXISTS=`cat $LOCALCONF | grep install-point`
+	if [[ "x$FACTORYEXISTS" == "x" ]]; then
+		echo "install-point=factory" >> $LOCALCONF
+	fi
+	SSHPORTEXISTS=`cat $LOCALCONF | grep ssh_port`
+	if [[ "x$SSHPORT" != "x" && "x$SSHPORTEXISTS" == "x" ]]; then
+		echo "ssh_port=$SSHPORT" >> $LOCALCONF
+	fi
+	SSHALLALLOWEXISTS=`cat $LOCALCONF | grep ssh_allallow`
+	if [[ "x$SSHALLALLOW" != "x" && "x$SSHALLALLOWEXISTS" == "x" ]]; then
+		echo "ssh_allallow=$SSHALLALLOW" >> $LOCALCONF
+	fi
 }
 
 function clean::pkg()
@@ -568,9 +653,16 @@ function init::depends()
 	systemctl stop smbd winbind samba-ad-dc nmbd nmb samba > /dev/null 2>&1
 	systemctl mask smbd winbind samba-ad-dc nmbd nmb samba > /dev/null 2>&1
 
-	apt update
-	apt --fix-broken -y install ${DPKGCONFOPT}
-	apt -y install curl ${DPKGCONFOPT}
+	apt-get update > /dev/null 2>&1
+	apt-get --fix-broken -y install ${DPKGCONFOPT} > /dev/null
+
+	# syslog-ng-core 때문에 설치가 실패하는 문제가 있음
+	apt remove --purge -y syslog-ng* > /dev/null 2>&1
+	rm -rf /etc/syslog-ng
+	rm -rf /etc/systemd/system/syslog-ng.service
+	systemctl mask syslog-ng.service
+
+	util::install_packages curl
 }
 
 # sources.list 초기화
@@ -610,7 +702,7 @@ function init::sourcelist()
 
 	if [[ "x$REPO_MIRROR" == "x" ]] && [[ "x$PLATFORM_ARCH" == "xx86_64" ]]; then
 		# ROOT_MIRROR에 의해서 변경되었으면 sed 에 의해서 변경 안되므로 OK
-		sed -i "s#ports.ubuntu.com#mirror.kakao.com#g" /etc/apt/sources.list
+		sed -i "s#ports.ubuntu.com#kr.archive.ubuntu.com#g" /etc/apt/sources.list
 	elif [[ "x$PLATFORM_ARCH" == "xx86_64" ]]; then
 		sed -i "s#ports.ubuntu.com#$REPO_MIRROR/$REPO_URI#g" /etc/apt/sources.list
 
@@ -745,7 +837,7 @@ EOF
 function clean::apt()
 {
 	apt remove -y libperconaserverclient* percona-release percona-server* --allow-change-held-packages > /dev/null 2>&1
-	apt clean
+	apt-get clean
 }
 
 function update::currentpkg()
@@ -754,28 +846,29 @@ function update::currentpkg()
 		return 0
 	fi
 
-	apt update
-	apt --fix-broken -y install ${DPKGCONFOPT}
-	apt -y upgrade ${DPKGCONFOPT}
+	apt-get update > /dev/null 2>&1
+	apt --fix-broken -y install ${DPKGCONFOPT} > /dev/null
+	apt -y upgrade ${DPKGCONFOPT} > /dev/null 2>&1
+	apt -y dist-upgrade ${DPKGCONFOPT}
 }
 
 function upgrade::sourcelist()
 {
 	local target=$1
 
-	sed -i "s/bionic/${target}/g" /etc/apt/sources.list
-	sed -i "s/bionic/${target}/g" /etc/apt/sources.list.d/*
+	sed -i "s/bionic/${target}/g" /etc/apt/sources.list > /dev/null 2>&1
+	sed -i "s/bionic/${target}/g" /etc/apt/sources.list.d/* > /dev/null 2>&1
 
 	if [[ "x$target" = "xjammy" ]]; then
-		sed -i "s/focal/${target}/g" /etc/apt/sources.list
-		sed -i "s/focal/${target}/g" /etc/apt/sources.list.d/*
+		sed -i "s/focal/${target}/g" /etc/apt/sources.list > /dev/null 2>&1
+		sed -i "s/focal/${target}/g" /etc/apt/sources.list.d/* > /dev/null 2>&1
 	fi
 
 	if [[ "x$target" = "xnoble" ]]; then
-		sed -i "s/focal/${target}/g" /etc/apt/sources.list
-		sed -i "s/focal/${target}/g" /etc/apt/sources.list.d/*
-		sed -i "s/jammy/${target}/g" /etc/apt/sources.list
-		sed -i "s/jammy/${target}/g" /etc/apt/sources.list.d/*
+		sed -i "s/focal/${target}/g" /etc/apt/sources.list > /dev/null 2>&1
+		sed -i "s/focal/${target}/g" /etc/apt/sources.list.d/* > /dev/null 2>&1
+		sed -i "s/jammy/${target}/g" /etc/apt/sources.list > /dev/null 2>&1
+		sed -i "s/jammy/${target}/g" /etc/apt/sources.list.d/* > /dev/null 2>&1
 	fi
 }
 
@@ -787,15 +880,18 @@ function install::repo()
 	fi
 
 	if [[ "$TARGET" == "GPC" ]]; then
-		wget -4 --no-check-certificate -O ${TMP_DIR}/percona-release_latest.$(lsb_release -sc 2>/dev/null)_all.deb https://repo.percona.com/percona/apt/percona-release_latest.$(lsb_release -sc 2>/dev/null)_all.deb
-		dpkg -i --force-overwrite ${TMP_DIR}/percona-release_latest.$(lsb_release -sc 2>/dev/null)_all.deb
-		percona-release setup ps80
+		wget -q --show-progress -4 --no-check-certificate -O ${TMP_DIR}/percona-release_latest.$(lsb_release -sc 2>/dev/null)_all.deb https://repo.percona.com/percona/apt/percona-release_latest.$(lsb_release -sc 2>/dev/null)_all.deb > /dev/null 2>&1
+		dpkg -i --force-overwrite ${TMP_DIR}/percona-release_latest.$(lsb_release -sc 2>/dev/null)_all.deb > /dev/null 2>&1
+		if ! percona-release setup ps80 > /dev/null 2>&1; then
+			util::error "percona-release setup failed."
+			exit -1
+		fi
 
 		wget -4 --no-check-certificate -qO - https://artifacts.elastic.co/GPG-KEY-elasticsearch | apt-key add -
 		#echo "deb https://artifacts.elastic.co/packages/7.x/apt stable main" > /etc/apt/sources.list.d/elastic-7.x.list
 		echo "deb https://artifacts.elastic.co/packages/6.x/apt stable main" > /etc/apt/sources.list.d/elastic-6.x.list
 	fi
-	apt update
+	apt-get update > /dev/null 2>&1
 }
 
 function upgrade::rel()
@@ -807,9 +903,13 @@ function upgrade::rel()
 	upgrade::sourcelist "${target}"
 
 	# syslog-ng-core 때문에 설치가 실패하는 문제가 있음
-	apt remove -y syslog-ng-core
-	apt update
-	apt --fix-broken -y install ${DPKGCONFOPT}
+	#apt remove --purge -y syslog-ng* > /dev/null 2>&1
+	#rm -rf /etc/syslog-ng
+	#rm -rf /etc/systemd/system/syslog-ng.service
+	#systemctl mask syslog-ng.service
+
+	apt-get update > /dev/null 2>&1
+	apt --fix-broken -y install ${DPKGCONFOPT} > /dev/null
 	apt -y dist-upgrade ${DPKGCONFOPT}
 
 	cp -f /etc/lsb-release.dpkg-dist /etc/lsb-release > /dev/null 2>&1
@@ -928,12 +1028,42 @@ while [ "${1:-}" != "" ]; do
   shift
 done
 
+CODENAME=$(util::getcodename)
+
+# 공장설치,aws,azure 설치가 아닌 경우에는 sourcelist 를 초기화
+if [[ "x$FACTORYINSTALL" != "x1" && "x$KERNEL_FLAVOR" != "xaws" && "x$KERNEL_FLAVOR" != "xazure" ]]; then
+	# sourcelist 를 초기화 한다. bionic 에서 시작
+	init::sourcelist
+	# 현재 운영체제에 따라서 sourcelist 변경
+	if [[ "x$CODENAME" == "xfocal" ]]; then
+		upgrade::sourcelist "focal"
+	fi
+	if [[ "x$CODENAME" == "xjammy" ]]; then
+		upgrade::sourcelist "jammy"
+	fi
+	if [[ "x$CODENAME" == "xnoble" ]]; then
+		upgrade::sourcelist "noble"
+	fi
+fi
+
+apt-get --fix-broken -y install ${DPKGCONFOPT} > /dev/null
+apt-get update > /dev/null 2>&1
+#apt -y upgrade
+util::install_packages lsof net-tools lsb-release
+
+if [[ "x$FACTORYINSTALL" != "x1" ]]; then
+	# check dpkg lock
+	PKGLOCK=`lsof /var/lib/dpkg/lock`
+	if [[ "x$PKGLOCK" != "x" ]]; then
+		util::error "Could not get lock /var/lib/dpkg/lock"
+		exit
+	fi
+fi
+
 if [[ "x$KERNEL_UPGRADE" != "x" ]]; then
 	upgrade::kernel "${KERNEL_UPGRADE}"
 	exit 0
 fi
-
-CODENAME=$(util::getcodename)
 
 printf "Genians $TARGET. $CODENAME(REL=$REL) $DEB\n"
 if [[ "x$TARGET" != "xGPC" ]] && [[ "x$TARGET" != "xGNS" ]]; then
@@ -961,22 +1091,6 @@ unhold::package
 clean::pkg
 clean::apt
 
-if [[ "x$FACTORYINSTALL" != "x1" ]]; then
-	# sourcelist 를 초기화 한다. bionic 에서 시작
-	init::sourcelist
-fi
-
-# 현재 운영체제에 따라서 sourcelist 변경
-if [[ "x$CODENAME" == "xfocal" ]]; then
-	upgrade::sourcelist "focal"
-fi
-if [[ "x$CODENAME" == "xjammy" ]]; then
-	upgrade::sourcelist "jammy"
-fi
-if [[ "x$CODENAME" == "xnoble" ]]; then
-	upgrade::sourcelist "noble"
-fi
-
 update::currentpkg
 
 # 업그레이드 (bionic -> focal)
@@ -1002,11 +1116,9 @@ if [[ "$UPGRADE" == "1" && "x$REL" != "x$CODENAME" ]]; then
 	exit -1
 fi
 
-[[ "x$CODENAME" == "xbionic" ]] && KERNEL="4.15.0-144-generic" && LDCONFNAC="genian-nac.conf"
-[[ "x$CODENAME" == "xjammy" ]] && KERNEL="5.15.0-91-generic"
-[[ "x$CODENAME" == "xnoble" ]] && KERNEL="6.8.0-31-generic"
+[[ "x$CODENAME" == "xbionic" ]] && LDCONFNAC="genian-nac.conf"
 
-# 업그레이드 후에 repo 등록
+# 업그레이드 후에 percona, elastic repo 등록
 install::repo
 
 if [[ "$UPGRADE" == "1" || "$INSTALL" == "1" ]]; then
@@ -1023,11 +1135,16 @@ if [[ "$UPGRADE" == "1" || "$INSTALL" == "1" ]]; then
 				echo "$DOWNLOADTARGET exist"
 				GDEB=$(/usr/bin/curl -w "%{filename_effective}" -sSkLO ${DOWNLOADTARGET})
 				DEBPKGCODENAME=`dpkg-deb --info $GDEB | grep Subarchitecture | awk -F ' ' '{print $2}'`
-				if [[ "$DEBPKGCODENAME" != "$CODENAME" ]]; then
+				if [[ "x$DEBPKGCODENAME" != "x" ]] && [[ "$DEBPKGCODENAME" != "$CODENAME" ]]; then
 					echo "Ubuntu CodeName error. $DEBPKGCODENAME != $CODENAME"
 					rm $GDEB
 					exit -1
 				fi
+
+				DEBPKGTARGET=`dpkg-deb --info $GDEB | grep Package | awk -F ' ' '{print $2}'`
+				[[ "x$DEBPKGTARGET" != "xgenian-nac-ns" ]] && [[ "x$DEBPKGTARGET" != "xgenian-nac" ]] && util::error "Cannot be installed because the package is unknown." && rm $GDEB && exit -1
+				[[ "x$DEBPKGTARGET" == "xgenian-nac-ns" ]] && [[ "x$TARGET" == "xGPC" ]] && util::error "$TARGET cannot be installed because the package is a network sensor." && rm $GDEB && exit -1
+				[[ "x$DEBPKGTARGET" == "xgenian-nac" ]] && [[ "x$TARGET" == "xGNS" ]] && util::error "$TARGET cannot be installed because the package is a policy center." && rm $GDEB && exit -1
 			else
 				echo "$DOWNLOADTARGET not exist"
 				exit -1
@@ -1036,10 +1153,15 @@ if [[ "$UPGRADE" == "1" || "$INSTALL" == "1" ]]; then
 			if [[ -f "$LOCALTARGET" ]]; then
 				echo "$LOCALTARGET exist"
 				DEBPKGCODENAME=`dpkg-deb --info $LOCALTARGET | grep Subarchitecture | awk -F ' ' '{print $2}'`
-				if [[ "$DEBPKGCODENAME" != "$CODENAME" ]]; then
+				if [[ "x$DEBPKGCODENAME" != "x" ]] && [[ "$DEBPKGCODENAME" != "$CODENAME" ]]; then
 					echo "Ubuntu CodeName error. $DEBPKGCODENAME != $CODENAME"
 					exit -1
 				fi
+
+				DEBPKGTARGET=`dpkg-deb --info $LOCALTARGET | grep Package | awk -F ' ' '{print $2}'`
+				[[ "x$DEBPKGTARGET" != "xgenian-nac-ns" ]] && [[ "x$DEBPKGTARGET" != "xgenian-nac" ]] && util::error "Cannot be installed because the package is unknown." && exit -1
+				[[ "x$DEBPKGTARGET" == "xgenian-nac-ns" ]] && [[ "x$TARGET" == "xGPC" ]] && util::error "$TARGET cannot be installed because the package is a network sensor." && exit -1
+				[[ "x$DEBPKGTARGET" == "xgenian-nac" ]] && [[ "x$TARGET" == "xGNS" ]] && util::error "$TARGET cannot be installed because the package is a policy center." && exit -1
 			else
 				echo "$LOCALTARGET not exist"
 				exit -1
@@ -1047,9 +1169,11 @@ if [[ "$UPGRADE" == "1" || "$INSTALL" == "1" ]]; then
 		fi
 	fi
 
+	util::info "Start installing Genians $TARGET"
+
 	util::setbash
 
-	apt update
+	apt-get update > /dev/null 2>&1
 
 	install::basepkg
 
@@ -1059,24 +1183,26 @@ if [[ "$UPGRADE" == "1" || "$INSTALL" == "1" ]]; then
 
 	hold::package
 
-	# remove netplan
-	# rm -rf /etc/netplan/*
-
 	if [[ "x$DEB" != "x" ]]; then
 		upgrade::nac
 	fi
 
 	util::setbash
 
-	sync
+	# remove netplan
+	rm -rf /etc/netplan/*
 
-	if [[ "$PROMPT" == "1" ]]; then
-		printf "Genians $TARGET installed. now reboot (y/n)?"
-		read answer
-		if [[ "x$answer" = "xy" ]]; then
+	if [[ "x$FACTORYINSTALL" != "x1" ]]; then
+		sync
+
+		if [[ "$PROMPT" == "1" ]]; then
+			printf "Genians $TARGET installed. now reboot (y/n)?"
+			read answer
+			if [[ "x$answer" = "xy" ]]; then
+				reboot -f
+			fi
+		else
 			reboot -f
 		fi
-	else
-		reboot -f
 	fi
 fi
