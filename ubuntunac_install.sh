@@ -1099,13 +1099,9 @@ if [[ "x$TARGET" != "xGPC" ]] && [[ "x$TARGET" != "xGNS" ]]; then
 	exit -1
 fi
 
-# 표준 입력이 터미널인지 확인하고 재지정
-         if ! [ -t 0 ]; then 
-            exec 0< /dev/tty || { 
-                echo "Error: Cannot access terminal for user input"
-                exit 1
-            }                                                                                                                                                                                                                                                                                         
-         fi
+
+exec 0< /dev/tty                                                                                                                                                                                                                                                                                      
+  
 	 
 if [[ "$PROMPT" == "1" ]]; then
 	printf "Genians NAC Upgrade. Continue (y/n)?"
