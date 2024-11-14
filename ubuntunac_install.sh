@@ -672,6 +672,7 @@ function init::sourcelist()
 	rm -rf /etc/apt/sources.list.d/genian*
 	rm -rf /etc/apt/sources.list.d/elastic-*
 	rm -rf /etc/apt/sources.list.d/percona*
+	rm -rf /etc/apt/sources.list.d/ubuntu.sources*
 
 	# bionic 에서 시작
 	echo -n "" > /etc/apt/sources.list
@@ -709,7 +710,6 @@ function init::sourcelist()
 		if [[ "$TARGET" == "GPC" ]]; then
 			cat << EOF > ${TMP_DIR}/GPG-KEY-elasticsearch
 -----BEGIN PGP PUBLIC KEY BLOCK-----
-Version: GnuPG v2.0.14 (GNU/Linux)
 
 mQENBFI3HsoBCADXDtbNJnxbPqB1vDNtCsqhe49vFYsZN9IOZsZXgp7aHjh6CJBD
 A+bGFOwyhbd7at35jQjWAw1O3cfYsKAmFy+Ar3LHCMkV3oZspJACTIgCrwnkic/9
@@ -718,31 +718,30 @@ j3SF1SPO+TB5QrHkrQHBsmX+Jda6d4Ylt8/t6CvMwgQNlrlzIO9WT+YN6zS+sqHd
 1YK/aY5qhoLNhp9G/HxhcSVCkLq8SStj1ZZ1S9juBPoXV1ZWNbxFNGwOh/NYGldD
 2kmBf3YgCqeLzHahsAEpvAm8TBa7Q9W21C8vABEBAAG0RUVsYXN0aWNzZWFyY2gg
 KEVsYXN0aWNzZWFyY2ggU2lnbmluZyBLZXkpIDxkZXZfb3BzQGVsYXN0aWNzZWFy
-Y2gub3JnPokBOAQTAQIAIgUCUjceygIbAwYLCQgHAwIGFQgCCQoLBBYCAwECHgEC
-F4AACgkQ0n1mbNiOQrRzjAgAlTUQ1mgo3nK6BGXbj4XAJvuZDG0HILiUt+pPnz75
-nsf0NWhqR4yGFlmpuctgCmTD+HzYtV9fp9qW/bwVuJCNtKXk3sdzYABY+Yl0Cez/
-7C2GuGCOlbn0luCNT9BxJnh4mC9h/cKI3y5jvZ7wavwe41teqG14V+EoFSn3NPKm
-TxcDTFrV7SmVPxCBcQze00cJhprKxkuZMPPVqpBS+JfDQtzUQD/LSFfhHj9eD+Xe
-8d7sw+XvxB2aN4gnTlRzjL1nTRp0h2/IOGkqYfIG9rWmSLNlxhB2t+c0RsjdGM4/
-eRlPWylFbVMc5pmDpItrkWSnzBfkmXL3vO2X3WvwmSFiQbkBDQRSNx7KAQgA5JUl
-zcMW5/cuyZR8alSacKqhSbvoSqqbzHKcUQZmlzNMKGTABFG1yRx9r+wa/fvqP6OT
-RzRDvVS/cycws8YX7Ddum7x8uI95b9ye1/Xy5noPEm8cD+hplnpU+PBQZJ5XJ2I+
-1l9Nixx47wPGXeClLqcdn0ayd+v+Rwf3/XUJrvccG2YZUiQ4jWZkoxsA07xx7Bj+
-Lt8/FKG7sHRFvePFU0ZS6JFx9GJqjSBbHRRkam+4emW3uWgVfZxuwcUCn1ayNgRt
-KiFv9jQrg2TIWEvzYx9tywTCxc+FFMWAlbCzi+m4WD+QUWWfDQ009U/WM0ks0Kww
-EwSk/UDuToxGnKU2dQARAQABiQEfBBgBAgAJBQJSNx7KAhsMAAoJENJ9ZmzYjkK0
-c3MIAIE9hAR20mqJWLcsxLtrRs6uNF1VrpB+4n/55QU7oxA1iVBO6IFu4qgsF12J
-TavnJ5MLaETlggXY+zDef9syTPXoQctpzcaNVDmedwo1SiL03uMoblOvWpMR/Y0j
-6rm7IgrMWUDXDPvoPGjMl2q1iTeyHkMZEyUJ8SKsaHh4jV9wp9KmC8C+9CwMukL7
-vM5w8cgvJoAwsp3Fn59AxWthN3XJYcnMfStkIuWgR7U2r+a210W6vnUxU4oN0PmM
-cursYPyeV0NX/KQeUeNMwGTFB6QHS/anRaGQewijkrYYoTNtfllxIu9XYmiBERQ/
-qPDlGRlOgVTd9xUfHFkzB52c70E=
-=92oX
+Y2gub3JnPokBTgQTAQgAOAIbAwIXgBYhBEYJWsyFSFgsGiaZqdJ9ZmzYjkK0BQJk
+9vrZBQsJCAcDBRUKCQgLBRYCAwEAAh4FAAoJENJ9ZmzYjkK00hoH+wYXZKgVb3Wv
+4AA/+T1IAf7edwgajr58bEyqds6/4v6uZBneUaqahUqMXgLFRX5dBSrAS7bvE/jx
++BBQx+rpFGxSwvFegRevE1zAGVtpgkFQX0RpRcKSmksucSBxikR/dPn9XdJSEVa8
+vPcs11V+2E5tq3LEP14zJL4MkJKQF0VJl5UUmKLS7U2F/IB5aXry9UWdMTnwNntX
+kl2iDaViYF4MC6xTS24uLwND2St0Jvjt+xGEwbdBVvp+UZ/kG6IGkYM5eWGPuok/
+DHvjUdwTfyO9b5xGbqn5FJ3UFOwB/nOSFXHM8rsHRT/67gHcIl8YFqSQXpIkk9D3
+dCY+KieW0ue5AQ0EUjceygEIAOSVJc3DFuf3LsmUfGpUmnCqoUm76Eqqm8xynFEG
+ZpczTChkwARRtckcfa/sGv376j+jk0c0Q71Uv3MnMLPGF+w3bpu8fLiPeW/cntf1
+8uZ6DxJvHA/oaZZ6VPjwUGSeVydiPtZfTYsceO8Dxl3gpS6nHZ9Gsnfr/kcH9/11
+Ca73HBtmGVIkOI1mZKMbANO8cewY/i7fPxShu7B0Rb3jxVNGUuiRcfRiao0gWx0U
+ZGpvuHplt7loFX2cbsHFAp9WsjYEbSohb/Y0K4NkyFhL82MfbcsEwsXPhRTFgJWw
+s4vpuFg/kFFlnw0NNPVP1jNJLNCsMBMEpP1A7k6MRpylNnUAEQEAAYkBNgQYAQgA
+IAIbDBYhBEYJWsyFSFgsGiaZqdJ9ZmzYjkK0BQJk9vsHAAoJENJ9ZmzYjkK0hWsH
+/ArKtn12HM3+41zYo9qO4rTri7+IYTjSB/JDTOusZgZLd/HCp1xQo4SI2Eur3Rtx
+USMWK1LEeBzsjwDT9yVceYekrBEqUVyRMSVYj+UeZK2s4LbXm9b4jxXVtaivmkMA
+jtznndrD7kmm8ak+UsZplf6p6uZS9TZ9hjwoMmw5oMaS6TZkLT4KYGWeyzHJSUBX
+YikY6vssDQu4SJ07m1f4Hz81J39QOcHln5I5HTK8Rh/VUFcxNnGg9360g55wWpiF
+eUTeMyoXpOtffiUhiOtbRYsmSYC0D4Fd5yJnO3n1pwnVVVsM7RAC22rc5j/Dw8dR
+GIHikRcYWeXTYW7veewK5Ss=
+=ftS0
 -----END PGP PUBLIC KEY BLOCK-----
 EOF
-			cat ${TMP_DIR}/GPG-KEY-elasticsearch | apt-key add -
-			#echo "deb http://$REPO_MIRROR/artifacts.elastic.co/packages/7.x/apt stable main" > /etc/apt/sources.list.d/elastic-7.x.list
-			echo "deb http://$REPO_MIRROR/artifacts.elastic.co/packages/6.x/apt stable main" > /etc/apt/sources.list.d/elastic-6.x.list
+			cat ${TMP_DIR}/GPG-KEY-elasticsearch | apt-key add - 2>/dev/null
 
 			cat << EOF > ${TMP_DIR}/percona-keyring.pub
 mQINBFd0veABEADyFa8jPHXhhX1XS9W7Og4p+jLxB0aowElk4Kt6lb/mYjwKmQ77
@@ -819,10 +818,6 @@ lumduUK5fHvJYiSyV1P5SKr4722C8jWCo2YcS+IsZgVFFuY1bG6HtiImpP75IM0G
 3g1uyd2OhF9nGDSxjp4kKWnUoGdV0P1bUXaAbvXRzlIcx7dOD7tZ
 EOF
 			openssl base64 -d -in ${TMP_DIR}/percona-keyring.pub -out /etc/apt/trusted.gpg.d/percona-keyring.gpg
-
-			echo "deb http://$REPO_MIRROR/repo.percona.com/prel/apt bionic main" > /etc/apt/sources.list.d/percona-prel-release.list
-			echo "deb http://$REPO_MIRROR/repo.percona.com/ps-80/apt bionic main" > /etc/apt/sources.list.d/percona-ps-80-release.list
-			echo "deb http://$REPO_MIRROR/repo.percona.com/tools/apt bionic main" > /etc/apt/sources.list.d/percona-tools-release.list
 		fi
 	fi
 
@@ -874,23 +869,44 @@ function upgrade::sourcelist()
 
 function install::repo()
 {
-	# REPO_MIRROR를 사용하면 폐쇄망
-	if [[ "x$REPO_MIRROR" != "x" ]] || [[ "x$PLATFORM_ARCH" != "xx86_64" ]]; then
+	if [[ "$TARGET" != "GPC" ]]; then
 		return
 	fi
 
-	if [[ "$TARGET" == "GPC" ]]; then
-		wget -q --show-progress -4 --no-check-certificate -O ${TMP_DIR}/percona-release_latest.$(lsb_release -sc 2>/dev/null)_all.deb https://repo.percona.com/percona/apt/percona-release_latest.$(lsb_release -sc 2>/dev/null)_all.deb > /dev/null 2>&1
-		dpkg -i --force-overwrite ${TMP_DIR}/percona-release_latest.$(lsb_release -sc 2>/dev/null)_all.deb > /dev/null 2>&1
-		if ! percona-release setup ps80 > /dev/null 2>&1; then
-			util::error "percona-release setup failed."
-			exit -1
-		fi
+	# REPO_MIRROR를 사용하면 폐쇄망
+	if [[ "x$REPO_MIRROR" != "x" ]] || [[ "x$PLATFORM_ARCH" != "xx86_64" ]]; then
+		if [[ "x$REPO_MIRROR" != "x" ]]; then
+			#echo "deb http://$REPO_MIRROR/artifacts.elastic.co/packages/7.x/apt stable main" > /etc/apt/sources.list.d/elastic-7.x.list
+			echo "deb http://$REPO_MIRROR/artifacts.elastic.co/packages/6.x/apt stable main" > /etc/apt/sources.list.d/elastic-6.x.list
 
-		wget -4 --no-check-certificate -qO - https://artifacts.elastic.co/GPG-KEY-elasticsearch | apt-key add -
-		#echo "deb https://artifacts.elastic.co/packages/7.x/apt stable main" > /etc/apt/sources.list.d/elastic-7.x.list
-		echo "deb https://artifacts.elastic.co/packages/6.x/apt stable main" > /etc/apt/sources.list.d/elastic-6.x.list
+			echo "deb http://$REPO_MIRROR/repo.percona.com/prel/apt bionic main" > /etc/apt/sources.list.d/percona-prel-release.list
+			echo "deb http://$REPO_MIRROR/repo.percona.com/ps-80/apt bionic main" > /etc/apt/sources.list.d/percona-ps-80-release.list
+			echo "deb http://$REPO_MIRROR/repo.percona.com/tools/apt bionic main" > /etc/apt/sources.list.d/percona-tools-release.list
+
+			upgrade::sourcelist $CODENAME
+
+			# LOCAL_MIRROR 는 저장장치에 repository 가 구성되어있음
+			if [[ "$LOCAL_MIRROR" == "1" ]]; then
+				sed -i -e "s#http:/#file:#g" -e "s#https:/#file:#g" /etc/apt/sources.list.d/elastic-7.x.list /etc/apt/sources.list.d/elastic-6.x.list \
+					/etc/apt/sources.list.d/percona-prel-release.list /etc/apt/sources.list.d/percona-ps-80-release.list /etc/apt/sources.list.d/percona-tools-release.list
+			fi
+
+			apt-get update > /dev/null 2>&1
+		fi
+		return
 	fi
+
+	wget -4 --show-progress --no-check-certificate -qO ${TMP_DIR}/percona-release_latest.$(lsb_release -sc 2>/dev/null)_all.deb https://repo.percona.com/percona/apt/percona-release_latest.$(lsb_release -sc 2>/dev/null)_all.deb > /dev/null 2>&1
+	dpkg -i --force-overwrite ${TMP_DIR}/percona-release_latest.$(lsb_release -sc 2>/dev/null)_all.deb > /dev/null 2>&1
+	if ! percona-release setup ps80 > /dev/null 2>&1; then
+		util::error "percona-release setup failed."
+		exit -1
+	fi
+
+	wget -4 --no-check-certificate -qO - https://artifacts.elastic.co/GPG-KEY-elasticsearch | apt-key add - 2>/dev/null
+	#echo "deb https://artifacts.elastic.co/packages/7.x/apt stable main" > /etc/apt/sources.list.d/elastic-7.x.list
+	echo "deb https://artifacts.elastic.co/packages/6.x/apt stable main" > /etc/apt/sources.list.d/elastic-6.x.list
+
 	apt-get update > /dev/null 2>&1
 }
 
@@ -1132,7 +1148,6 @@ if [[ "$UPGRADE" == "1" || "$INSTALL" == "1" ]]; then
 		printf "	DEB $LOCALTARGET $DOWNLOADTARGET\n"
 		if [[ "x$DOWNLOADTARGET" != "x" ]]; then
 			if ( /usr/bin/curl -o/dev/null -sfI "$DOWNLOADTARGET" ); then
-				echo "$DOWNLOADTARGET exist"
 				GDEB=$(/usr/bin/curl -w "%{filename_effective}" -sSkLO ${DOWNLOADTARGET})
 				DEBPKGCODENAME=`dpkg-deb --info $GDEB | grep Subarchitecture | awk -F ' ' '{print $2}'`
 				if [[ "x$DEBPKGCODENAME" != "x" ]] && [[ "$DEBPKGCODENAME" != "$CODENAME" ]]; then
@@ -1151,7 +1166,6 @@ if [[ "$UPGRADE" == "1" || "$INSTALL" == "1" ]]; then
 			fi
 		else
 			if [[ -f "$LOCALTARGET" ]]; then
-				echo "$LOCALTARGET exist"
 				DEBPKGCODENAME=`dpkg-deb --info $LOCALTARGET | grep Subarchitecture | awk -F ' ' '{print $2}'`
 				if [[ "x$DEBPKGCODENAME" != "x" ]] && [[ "$DEBPKGCODENAME" != "$CODENAME" ]]; then
 					echo "Ubuntu CodeName error. $DEBPKGCODENAME != $CODENAME"
@@ -1191,6 +1205,8 @@ if [[ "$UPGRADE" == "1" || "$INSTALL" == "1" ]]; then
 
 	# remove netplan
 	rm -rf /etc/netplan/*
+
+	apt remove -y landscape-common > /dev/null 2>&1
 
 	if [[ "x$FACTORYINSTALL" != "x1" ]]; then
 		sync
