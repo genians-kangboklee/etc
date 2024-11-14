@@ -1105,7 +1105,7 @@ exec 0< /dev/tty
 	 
 if [[ "$PROMPT" == "1" ]]; then
 	printf "Genians NAC Upgrade. Continue (y/n)?"
-	read answer
+	read answer < /dev/tty
 	if [[ "x$answer" != "xy" ]]; then
 		exit 1
 	fi
@@ -1225,7 +1225,7 @@ if [[ "$UPGRADE" == "1" || "$INSTALL" == "1" ]]; then
 
 		if [[ "$PROMPT" == "1" ]]; then
 			printf "Genians $TARGET installed. now reboot (y/n)?"
-			read answer
+			read answer < /dev/tty
 			if [[ "x$answer" = "xy" ]]; then
 				reboot -f
 			fi
