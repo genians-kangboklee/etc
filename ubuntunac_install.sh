@@ -1097,11 +1097,7 @@ if [[ "x$TARGET" != "xGPC" ]] && [[ "x$TARGET" != "xGNS" ]]; then
 	echo "GNS     NETWORK SENSOR"
 	echo
 	exit -1
-fi
-
-
-exec 0< /dev/tty                                                                                                                                                                                                                                                                                      
-  
+fi  
 	 
 if [[ "$PROMPT" == "1" ]]; then
 	printf "Genians NAC Upgrade. Continue (y/n)?"
