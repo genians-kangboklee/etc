@@ -558,13 +558,13 @@ function upgrade::nac()
 	fi
 
 	if [[ "x$FACTORYINSTALL" != "x1" ]]; then
-         # 표준 입력이 터미널인지 확인하고 재지정
-         if ! [ -t 0 ]; then 
-            exec 0< /dev/tty || { 
-                echo "Error: Cannot access terminal for user input"
-                exit 1
-            }                                                                                                                                                                                                                                                                                         
-         fi
+		# 표준 입력이 터미널인지 확인하고 재지정
+		if ! [ -t 0 ]; then
+			exec 0< /dev/tty || {
+				echo "Error: Cannot access terminal for user input"
+				exit 1
+			}
+		fi
 		export ETH_INTERFACES=$ETH_INTERFACES
 		export ALT_INTERFACES=$ALT_INTERFACES
 		export DEF_GATEWAY=$DEF_GATEWAY
@@ -1097,8 +1097,8 @@ if [[ "x$TARGET" != "xGPC" ]] && [[ "x$TARGET" != "xGNS" ]]; then
 	echo "GNS     NETWORK SENSOR"
 	echo
 	exit -1
-fi  
-	 
+fi
+
 if [[ "$PROMPT" == "1" ]]; then
 	printf "Genians NAC Upgrade. Continue (y/n)?"
 	read answer < /dev/tty
