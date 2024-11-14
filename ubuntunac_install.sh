@@ -485,7 +485,7 @@ function upgrade::config()
 function upgrade::nac()
 {
 	if [[ "x$DOWNLOADTARGET" != "x" ]]; then
-		GDEB=$(/usr/bin/curl -w "%{filename_effective}" -sSkLO ${DOWNLOADTARGET})
+		GDEB=$(/usr/bin/curl -# -w "%{filename_effective}" -SkLO ${DOWNLOADTARGET})
 		DEBPKGCODENAME=`dpkg-deb --info $GDEB | grep Subarchitecture | awk -F ' ' '{print $2}'`
 		if [[ "x$DEBPKGCODENAME" != "x" ]] && [[ "$DEBPKGCODENAME" != "$CODENAME" ]]; then
 			echo "Ubuntu CodeName error. $DEBPKGCODENAME != $CODENAME"
@@ -1062,6 +1062,7 @@ if [[ "x$FACTORYINSTALL" != "x1" && "x$KERNEL_FLAVOR" != "xaws" && "x$KERNEL_FLA
 	fi
 fi
 
+dpkg --configure -a > /dev/null 2>&1
 apt-get --fix-broken -y install ${DPKGCONFOPT} > /dev/null
 apt-get update > /dev/null 2>&1
 #apt -y upgrade
@@ -1148,7 +1149,7 @@ if [[ "$UPGRADE" == "1" || "$INSTALL" == "1" ]]; then
 		printf "	DEB $LOCALTARGET $DOWNLOADTARGET\n"
 		if [[ "x$DOWNLOADTARGET" != "x" ]]; then
 			if ( /usr/bin/curl -o/dev/null -sfI "$DOWNLOADTARGET" ); then
-				GDEB=$(/usr/bin/curl -w "%{filename_effective}" -sSkLO ${DOWNLOADTARGET})
+				GDEB=$(/usr/bin/curl -# -w "%{filename_effective}" -SkLO ${DOWNLOADTARGET})
 				DEBPKGCODENAME=`dpkg-deb --info $GDEB | grep Subarchitecture | awk -F ' ' '{print $2}'`
 				if [[ "x$DEBPKGCODENAME" != "x" ]] && [[ "$DEBPKGCODENAME" != "$CODENAME" ]]; then
 					echo "Ubuntu CodeName error. $DEBPKGCODENAME != $CODENAME"
