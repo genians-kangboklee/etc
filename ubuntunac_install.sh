@@ -81,10 +81,22 @@ function util::install_packages()
 	packages=("$@")
 	for package in "${packages[@]}"; do
 		util::info "Install... $package"
-		if ! apt-get install -y "$package" ${DPKGCONFOPT} >> $LOGFILE 2>&1; then
-			util::error "Error: Failed to install $package"
+		retry_count=0
+		success=false
+		while [ $retry_count -lt 10 ]; do
+			if apt-get install -y "$package" ${DPKGCONFOPT} >> $LOGFILE 2>&1; then
+				success=true
+				break
+			else
+				util::error "Error: Failed to install $package (attempt $((retry_count+1)))"
+				retry_count=$((retry_count + 1))
+			fi
+		done
+
+		if ! $success; then
+			util::error "Error: Failed to install $package after 10 attempts"
 			apt-get install -y "$package" 2>&1 | tee -a "$LOGFILE" | grep -E "^E:" | while read -r line ; do
-				util::error "${line}"
+			util::error "${line}"
 			done
 			exit 1
 		fi
