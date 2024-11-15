@@ -523,35 +523,31 @@ function upgrade::nac()
 	#systemctl stop apparmor > /dev/null 2>&1
 	#systemctl disable apparmor > /dev/null 2>&1
 
-	if [[ "x$KERNELUP" == "xno" ]]; then
-		return
+	if [[ "x$KERNELUP" != "xno" ]]; then
+		# 커널업그레이드
+		# /usr/geni 에서 가장높은 커널버전 모듈을 찾아서 커널버전을 업그레이드
+
+		HOST_KERNELVER=$(uname -r)
+		NAC_KERNELVER=$(ls /usr/geni/nac_*${KERNEL_FLAVOR}.ko 2>/dev/null | sort -V | tail -n 1 | awk -F '_' '{print $2}' | sed 's/\.ko$//')
+
+		kvregex="^[0-9]+\.[0-9]+\.[0-9]+"
+		if  [[ ! $HOST_KERNELVER =~ $kvregex ]] || [[ ! "$NAC_KERNELVER" =~ $kvregex ]]; then
+			echo "Unknown kernel version format."
+			echo "  HOST=$HOST_KERNELVER"
+			echo "  NAC=$NAC_KERNELVER"
+			return
+		fi
+
+		if [ "x$HOST_KERNELVER" != "x$NAC_KERNELVER" ]; then
+			echo "-------------------"
+			echo "Current kernel version: $HOST_KERNELVER"
+			echo "NAC supported kernel version: $NAC_KERNELVER"
+			echo "It will be install the kernel version."
+			echo "-------------------"
+
+			upgrade::kernel $NAC_KERNELVER
+		fi
 	fi
-
-	# 커널업그레이드
-	# /usr/geni 에서 가장높은 커널버전 모듈을 찾아서 커널버전을 업그레이드
-
-	HOST_KERNELVER=$(uname -r)
-	NAC_KERNELVER=$(ls /usr/geni/nac_*${KERNEL_FLAVOR}.ko 2>/dev/null | sort -V | tail -n 1 | awk -F '_' '{print $2}' | sed 's/\.ko$//')
-
-	kvregex="^[0-9]+\.[0-9]+\.[0-9]+"
-	if  [[ ! $HOST_KERNELVER =~ $kvregex ]] || [[ ! "$NAC_KERNELVER" =~ $kvregex ]]; then
-		echo "Unknown kernel version format."
-		echo "  HOST=$HOST_KERNELVER"
-		echo "  NAC=$NAC_KERNELVER"
-		return
-	fi
-
-	if [ "x$HOST_KERNELVER" == "x$NAC_KERNELVER" ]; then
-		return
-	fi
-
-	echo "-------------------"
-	echo "Current kernel version: $HOST_KERNELVER"
-	echo "NAC supported kernel version: $NAC_KERNELVER"
-	echo "It will be install the kernel version."
-	echo "-------------------"
-
-	upgrade::kernel $NAC_KERNELVER
 
 	if [[ "$UPGRADE" == "1" ]]; then
 		return 0
