@@ -91,6 +91,8 @@ function util::install_packages()
 				util::error "Error: Failed to install $package (attempt $((retry_count+1)))"
 				retry_count=$((retry_count + 1))
 			fi
+
+			sleep 5
 		done
 
 		if ! $success; then
