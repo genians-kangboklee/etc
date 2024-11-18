@@ -106,7 +106,7 @@ function util::install_packages()
 }
 
 PERCONA_VERSION="8.0.37-29-1"
-FILEBEAT_VERSION="6.8.6"
+FILEBEAT_VERSION="7.17.25"
 ELASTIC_VERSION="6.8.6"
 LOCALCONF="/disk/sys/conf/local.conf"
 CENABLEPASSWORD="/disk/sys/conf/CENABLEPASSWORD"
@@ -332,7 +332,11 @@ function install::nacpkg()
 	if [[ "x$CODENAME" == "xfocal" || "x$CODENAME" == "xjammy" || "x$CODENAME" == "xnoble" ]]; then
 		systemctl disable filebeat > /dev/null 2>&1
 		systemctl mask filebeat > /dev/null 2>&1
+		echo "deb https://artifacts.elastic.co/packages/7.x/apt stable main" > /etc/apt/sources.list.d/elastic-7.x.list
+		apt-get update > /dev/null 2>&1
 		util::install_packages filebeat=${FILEBEAT_VERSION}
+		rm -rf /etc/apt/sources.list.d/elastic-7.x.list > /dev/null 2>&1
+		apt-get update > /dev/null 2>&1
 	fi
 
 	apt-get update > /dev/null 2>&1
@@ -720,7 +724,7 @@ function init::sourcelist()
 
 	if [[ "x$REPO_MIRROR" == "x" ]] && [[ "x$PLATFORM_ARCH" == "xx86_64" ]]; then
 		# ROOT_MIRROR에 의해서 변경되었으면 sed 에 의해서 변경 안되므로 OK
-		sed -i "s#ports.ubuntu.com#kr.archive.ubuntu.com#g" /etc/apt/sources.list
+		sed -i "s#ports.ubuntu.com#archive.ubuntu.com#g" /etc/apt/sources.list
 	elif [[ "x$PLATFORM_ARCH" == "xx86_64" ]]; then
 		sed -i "s#ports.ubuntu.com#$REPO_MIRROR/$REPO_URI#g" /etc/apt/sources.list
 
