@@ -88,7 +88,7 @@ function util::install_packages()
 				success=true
 				break
 			else
-				util::error "Error: Failed to install $package (attempt $((retry_count+1)))"
+				util::error "Failed to install $package (attempt $((retry_count+1)))"
 				retry_count=$((retry_count + 1))
 			fi
 
@@ -96,7 +96,7 @@ function util::install_packages()
 		done
 
 		if ! $success; then
-			util::error "Error: Failed to install $package after 10 attempts"
+			util::error "Failed to install $package after 10 attempts"
 			apt-get install -y "$package" 2>&1 | tee -a "$LOGFILE" | grep -E "^E:" | while read -r line ; do
 			util::error "${line}"
 			done
