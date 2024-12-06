@@ -54,7 +54,7 @@ REPO_MIRROR="${REPO_MIRROR:-}"
 REPO_URI="${REPO_URI:-archive.ubuntu.com}"
 TARGET="${TARGET:-}"
 UPGRADE="${UPGRADE:-}"
-INSTALL="${INSTALL:-}"
+INSTALL="${INSTALL:-1}"
 KERNEL_UPGRADE="${KERNAL_UPGRADE:-}"
 DEB="${DEB:-}"
 LOCALE="${LOCALE:-}"
@@ -1016,6 +1016,7 @@ while [ "${1:-}" != "" ]; do
     install )       INSTALL=1
                     ;;
     upgrade )       UPGRADE=1
+                    INSTALL=0
                     ;;
     -sshport )      shift
                     SSHPORT=${1:-$SSHPORT}
