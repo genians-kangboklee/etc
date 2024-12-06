@@ -1157,7 +1157,7 @@ if [[ "$UPGRADE" == "1" && "x$REL" != "x$CODENAME" ]]; then
 fi
 
 if [[ "x$DEB" == "xv5" || "x$DEB" == "xnac" ]]; then
-	DEB=https://d1s536j2uzv1h7.cloudfront.net/images/NAC/GNOS/v5.0/RELEASE/
+	DEB=https://d1s536j2uzv1h7.cloudfront.net/images/NAC/GNOS/v5.0/RELEASE
 	if [ "x$TARGET" = "xGPC" ]; then
 		DEB=$DEB/NAC-UBUNTU-R-current.${CODENAME}_${DPKGARCH}.deb
 	else
@@ -1165,7 +1165,7 @@ if [[ "x$DEB" == "xv5" || "x$DEB" == "xnac" ]]; then
 	fi
 fi
 if [[ "x$DEB" == "xv6" || "x$DEB" == "xztna" ]]; then
-	DEB=https://d1s536j2uzv1h7.cloudfront.net/images/NAC/GNOS/v6.0/RELEASE/
+	DEB=https://d1s536j2uzv1h7.cloudfront.net/images/NAC/GNOS/v6.0/RELEASE
 	if [ "x$TARGET" = "xGPC" ]; then
 		DEB=$DEB/NAC-UBUNTU-R-current.${CODENAME}_${DPKGARCH}.deb
 	else
