@@ -1066,6 +1066,7 @@ while [ "${1:-}" != "" ]; do
 done
 
 CODENAME=$(util::getcodename)
+DPKGARCH=`dpkg --print-architecture`
 
 # 공장설치,aws,azure 설치가 아닌 경우에는 sourcelist 를 초기화
 if [[ "x$FACTORYINSTALL" != "x1" && "x$KERNEL_FLAVOR" != "xaws" && "x$KERNEL_FLAVOR" != "xazure" ]]; then
@@ -1153,6 +1154,25 @@ if [[ "$UPGRADE" == "1" && "x$REL" != "x$CODENAME" ]]; then
 	echo
 	exit -1
 fi
+
+if [[ "x$DEB" == "xv5" || "x$DEB" == "xnac" ]]; then
+	DEB=https://d1s536j2uzv1h7.cloudfront.net/images/NAC/GNOS/v5.0/RELEASE/
+	if [ "x$TARGET" = "xGPC" ]; then
+		DEB=$DEB/NAC-UBUNTU-R-current.${CODENAME}_${DPKGARCH}.deb
+	else
+		DEB=$DEB/NAC-UBUNTUNS-R-current.${CODENAME}_${DPKGARCH}.deb
+	fi
+fi
+if [[ "x$DEB" == "xv6" || "x$DEB" == "xztna" ]]; then
+	DEB=https://d1s536j2uzv1h7.cloudfront.net/images/NAC/GNOS/v6.0/RELEASE/
+	if [ "x$TARGET" = "xGPC" ]; then
+		DEB=$DEB/NAC-UBUNTU-R-current.${CODENAME}_${DPKGARCH}.deb
+	else
+		DEB=$DEB/NAC-UBUNTUNS-R-current.${CODENAME}_${DPKGARCH}.deb
+	fi
+fi
+
+util::info "Install NAC Package: $DEB"
 
 [[ "x$CODENAME" == "xbionic" ]] && LDCONFNAC="genian-nac.conf"
 
