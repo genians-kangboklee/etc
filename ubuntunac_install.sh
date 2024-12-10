@@ -945,9 +945,20 @@ function upgrade::rel()
 	#rm -rf /etc/systemd/system/syslog-ng.service
 	#systemctl mask syslog-ng.service
 
+	apt-get clean > /dev/null 2>&1
 	apt-get update > /dev/null 2>&1
 	apt --fix-broken -y install ${DPKGCONFOPT} > /dev/null
+
+	#apt-get install -y ubuntu-release-upgrader-core > /dev/null 2>&1
+	#apt-get install -y usrmerge > /dev/null 2>&1
+
 	apt -y dist-upgrade ${DPKGCONFOPT}
+
+	currcode=$(util::getcodename)
+	if [[ "x$target" != "x$currcode" ]]; then
+		util::error "Could not upgrade UBUNTU Release. $currcode to $target"
+		exit -1
+	fi
 
 	cp -f /etc/lsb-release.dpkg-dist /etc/lsb-release > /dev/null 2>&1
 }
