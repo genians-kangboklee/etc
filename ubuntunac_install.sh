@@ -24,7 +24,7 @@ if [[ "x$FACTORYINSTALL" != "x1" ]]; then
 
 	if [[ "$ID" != "root" ]]; then
 		util::error "You must be root for install."
-		exit
+		exit -1
 	fi
 else
 	PROMPT=0
@@ -100,7 +100,7 @@ function util::install_packages()
 			apt-get install -y "$package" 2>&1 | tee -a "$LOGFILE" | grep -E "^E:" | while read -r line ; do
 			util::error "${line}"
 			done
-			exit 1
+			exit -1
 		fi
 	done
 }
@@ -576,7 +576,7 @@ function upgrade::nac()
 		if ! [ -t 0 ]; then
 			exec 0< /dev/tty || {
 				echo "Error: Cannot access terminal for user input"
-				exit 1
+				exit -1
 			}
 		fi
 		export ETH_INTERFACES=$ETH_INTERFACES
@@ -1027,7 +1027,7 @@ DEB=https://download.geninetworks.com/tftpboot/NAC/GNOS/v5.0/RELEASE/AAT/NAC-UBU
   curl -sSLk http://172.29.74.155:8000/`basename $0` | sudo DEBUG=1 UPGRADE=1 PROMPT=0 TARGET=GNS LOCALE=ko TIMEZONE=Asia/Seoul REL=focal \
 DEB=https://download.geninetworks.com/tftpboot/NAC/GNOS/v5.0/RELEASE/AAT/NAC-UBUNTUNS-R-121077-5.0.57.1106.deb bash -
 EOF
-  exit 1
+  exit -1
 }
 
 while [ "${1:-}" != "" ]; do
@@ -1080,7 +1080,7 @@ while [ "${1:-}" != "" ]; do
                     NETDRV=${1:-$NETDRV}
                     ;;
     * )             help::usage
-                    exit 1
+                    exit -1
   esac
   shift
 done
@@ -1104,20 +1104,29 @@ if [[ "x$FACTORYINSTALL" != "x1" && "x$KERNEL_FLAVOR" != "xaws" && "x$KERNEL_FLA
 	fi
 fi
 
-dpkg --configure -a > /dev/null 2>&1
-apt-get --fix-broken -y install ${DPKGCONFOPT} > /dev/null
-apt-get update > /dev/null 2>&1
-#apt -y upgrade
-util::install_packages lsof net-tools lsb-release
+echo "TARGET=$TARGET"
+echo "FACTORYINSTALL=$FACTORYINSTALL"
+echo "INSTALL=$INSTALL"
+echo "UPGRADE=$UPGRADE"
+echo "LOCALE=$LOCALE"
+echo "TIMEZONE=$TIMEZONE"
+echo "REL=$REL"
+echo "DEB=$DEB"
 
 if [[ "x$FACTORYINSTALL" != "x1" ]]; then
 	# check dpkg lock
 	PKGLOCK=`lsof /var/lib/dpkg/lock`
 	if [[ "x$PKGLOCK" != "x" ]]; then
 		util::error "Could not get lock /var/lib/dpkg/lock"
-		exit
+		exit -1
 	fi
 fi
+
+dpkg --configure -a > /dev/null 2>&1
+apt-get --fix-broken -y install ${DPKGCONFOPT} > /dev/null
+apt-get update > /dev/null 2>&1
+#apt -y upgrade
+util::install_packages lsof net-tools lsb-release
 
 if [[ "x$KERNEL_UPGRADE" != "x" ]]; then
 	upgrade::kernel "${KERNEL_UPGRADE}"
@@ -1138,7 +1147,7 @@ if [[ "$PROMPT" == "1" ]]; then
 	printf "Genians NAC Upgrade. Continue (y/n)?"
 	read answer < /dev/tty
 	if [[ "x$answer" != "xy" ]]; then
-		exit 1
+		exit -1
 	fi
 elif [[ "$INSTALL" != "1" ]]; then
 	UPGRADE=1
@@ -1284,3 +1293,5 @@ if [[ "$UPGRADE" == "1" || "$INSTALL" == "1" ]]; then
 		fi
 	fi
 fi
+
+exit 0
