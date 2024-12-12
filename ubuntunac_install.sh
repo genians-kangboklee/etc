@@ -635,7 +635,7 @@ function init::env()
 	# CURL 링크가 아닌 경우에만 삭제
 	if [ -f /usr/geni/curl ] && [ ! -h /usr/geni/curl ]; then
 		rm -rf /usr/geni/lib/libcurl*
-		rm /usr/geni/curl
+		rm -rf /usr/geni/curl
 	fi
 
 	rm -rf /etc/ld.so.conf.d/genian-nac.conf > /dev/null 2>&1
