@@ -632,6 +632,12 @@ function init::env()
 
 	util::setbash
 
+	# CURL 링크가 아닌 경우에만 삭제
+	if [ -f /usr/geni/curl ] && [ ! -h /usr/geni/curl ]; then
+		rm -rf /usr/geni/lib/libcurl*
+		rm /usr/geni/curl
+	fi
+
 	rm -rf /etc/ld.so.conf.d/genian-nac.conf > /dev/null 2>&1
 	rm -rf /etc/ld.so.conf.d/aaa-genian-nac.conf > /dev/null 2>&1
 	ldconfig
@@ -937,6 +943,9 @@ function upgrade::rel()
 
 	update::currentpkg
 
+	apt-get install -y ubuntu-release-upgrader-core > /dev/null 2>&1
+	apt-get install -y usrmerge > /dev/null 2>&1
+
 	upgrade::sourcelist "${target}"
 
 	# syslog-ng-core 때문에 설치가 실패하는 문제가 있음
@@ -948,11 +957,10 @@ function upgrade::rel()
 	apt-get clean > /dev/null 2>&1
 	apt-get update > /dev/null 2>&1
 	apt --fix-broken -y install ${DPKGCONFOPT} > /dev/null
-
-	#apt-get install -y ubuntu-release-upgrader-core > /dev/null 2>&1
-	#apt-get install -y usrmerge > /dev/null 2>&1
-
 	apt -y dist-upgrade ${DPKGCONFOPT}
+
+	apt-get install -y ubuntu-release-upgrader-core > /dev/null 2>&1
+	apt-get install -y usrmerge > /dev/null 2>&1
 
 	currcode=$(util::getcodename)
 	if [[ "x$target" != "x$currcode" ]]; then
