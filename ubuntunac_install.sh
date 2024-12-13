@@ -45,7 +45,7 @@ ALT_INTERFACES=
 KERNEL_FLAVOR=`uname -r | awk -F'-' '{print $3}'`
 [ "x$KERNEL_FLAVOR" = "x" ] && KERNEL_FLAVOR="none"
 PROMPT="${PROMPT:-1}"
-DPKGCONFOPT="-o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold"
+DPKGCONFOPT="-o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold -o Dpkg::Options::=--force-overwrite"
 REL="${REL:-$(awk -F'=' '/UBUNTU_CODENAME/ {print $2}' /etc/os-release)}"
 PLATFORM_ARCH=$(arch)
 LOCAL_MIRROR="${LOCAL_MIRROR:-}"
