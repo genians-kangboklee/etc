@@ -1104,14 +1104,14 @@ if [[ "x$FACTORYINSTALL" != "x1" && "x$KERNEL_FLAVOR" != "xaws" && "x$KERNEL_FLA
 	fi
 fi
 
-echo "TARGET=$TARGET"
-echo "FACTORYINSTALL=$FACTORYINSTALL"
-echo "INSTALL=$INSTALL"
-echo "UPGRADE=$UPGRADE"
-echo "LOCALE=$LOCALE"
-echo "TIMEZONE=$TIMEZONE"
-echo "REL=$REL"
-echo "DEB=$DEB"
+util::info "TARGET=$TARGET"
+util::info "FACTORYINSTALL=$FACTORYINSTALL"
+util::info "INSTALL=$INSTALL"
+util::info "UPGRADE=$UPGRADE"
+util::info "LOCALE=$LOCALE"
+util::info "TIMEZONE=$TIMEZONE"
+util::info "REL=$REL"
+util::info "DEB=$DEB"
 
 if [[ "x$FACTORYINSTALL" != "x1" ]]; then
 	# check dpkg lock
