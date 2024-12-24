@@ -945,6 +945,8 @@ function upgrade::rel()
 
 	apt-get install -y ubuntu-release-upgrader-core > /dev/null 2>&1
 	apt-get install -y usrmerge > /dev/null 2>&1
+	apt-get install -y fakeroot > /dev/null 2>&1
+	apt-get install -y libfakeroot > /dev/null 2>&1
 
 	upgrade::sourcelist "${target}"
 
@@ -961,13 +963,19 @@ function upgrade::rel()
 
 	apt-get install -y ubuntu-release-upgrader-core > /dev/null 2>&1
 	apt-get install -y usrmerge > /dev/null 2>&1
+	apt-get install -y fakeroot > /dev/null 2>&1
+	apt-get install -y libfakeroot > /dev/null 2>&1
 
 	currcode=$(util::getcodename)
 	if [[ "x$target" != "x$currcode" ]]; then
 		util::error "Could not upgrade UBUNTU Release. $currcode to $target"
 		exit -1
 	fi
+	if [[ "x$currcode" == "xjammy" || "x$currcode" == "xnoble" ]]; then
+		apt-get install -y --reinstall libssl3 > /dev/null 2>&1
+	fi
 
+	ldconfig
 	cp -f /etc/lsb-release.dpkg-dist /etc/lsb-release > /dev/null 2>&1
 }
 
@@ -1121,6 +1129,8 @@ if [[ "x$FACTORYINSTALL" != "x1" ]]; then
 		exit -1
 	fi
 fi
+
+unset LD_LIBRARY_PATH
 
 dpkg --configure -a > /dev/null 2>&1
 apt-get --fix-broken -y install ${DPKGCONFOPT} > /dev/null
@@ -1277,6 +1287,7 @@ if [[ "$UPGRADE" == "1" || "$INSTALL" == "1" ]]; then
 	# remove netplan
 	rm -rf /etc/netplan/*
 
+	#apt --fix-broken -y install ${DPKGCONFOPT} > /dev/null
 	apt remove -y landscape-common > /dev/null 2>&1
 
 	if [[ "x$FACTORYINSTALL" != "x1" ]]; then
