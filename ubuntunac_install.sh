@@ -332,11 +332,13 @@ function install::nacpkg()
 	if [[ "x$CODENAME" == "xfocal" || "x$CODENAME" == "xjammy" || "x$CODENAME" == "xnoble" ]]; then
 		systemctl disable filebeat > /dev/null 2>&1
 		systemctl mask filebeat > /dev/null 2>&1
-		echo "deb https://artifacts.elastic.co/packages/7.x/apt stable main" > /etc/apt/sources.list.d/elastic-7.x.list
-		apt-get update > /dev/null 2>&1
-		util::install_packages filebeat=${FILEBEAT_VERSION}
-		rm -rf /etc/apt/sources.list.d/elastic-7.x.list > /dev/null 2>&1
-		apt-get update > /dev/null 2>&1
+		if [[ "x$(apt list --installed 2>/dev/null | grep filebeat)" == "x" ]]; then
+			echo "deb https://artifacts.elastic.co/packages/7.x/apt stable main" > /etc/apt/sources.list.d/elastic-7.x.list
+			apt-get update > /dev/null 2>&1
+			util::install_packages filebeat=${FILEBEAT_VERSION}
+			rm -rf /etc/apt/sources.list.d/elastic-7.x.list > /dev/null 2>&1
+			apt-get update > /dev/null 2>&1
+		fi
 	fi
 
 	apt-get update > /dev/null 2>&1
@@ -646,16 +648,19 @@ function init::env()
 function hold::package()
 {
 	# package hold
-	apt-mark hold libpercona* percona-server* elasticsearch apache2* tomcat8* tomcat9* tomcat10* > /dev/null 2>&1
+	apt-mark hold libpercona* percona-server* elasticsearch filebeat apache2* tomcat8* tomcat9* tomcat10* > /dev/null 2>&1
 }
 
 function unhold::package()
 {
 	# package unhold
-	apt-mark unhold libpercona* percona-server* elasticsearch apache2* tomcat8* tomcat9* tomcat10* linux-image* linux-headers* > /dev/null 2>&1
+	apt-mark unhold libpercona* percona-server* elasticsearch filebeat apache2* tomcat8* tomcat9* tomcat10* linux-image* linux-headers* > /dev/null 2>&1
 
 	if [[ "x$(apt list --installed 2>/dev/null | grep elasticsearch)" != "x" ]]; then
 		apt-mark hold elasticsearch > /dev/null 2>&1
+	fi
+	if [[ "x$(apt list --installed 2>/dev/null | grep filebeat)" != "x" ]]; then
+		apt-mark hold filebeat > /dev/null 2>&1
 	fi
 }
 
@@ -1287,7 +1292,6 @@ if [[ "$UPGRADE" == "1" || "$INSTALL" == "1" ]]; then
 	# remove netplan
 	rm -rf /etc/netplan/*
 
-	#apt --fix-broken -y install ${DPKGCONFOPT} > /dev/null
 	apt remove -y landscape-common > /dev/null 2>&1
 
 	if [[ "x$FACTORYINSTALL" != "x1" ]]; then
