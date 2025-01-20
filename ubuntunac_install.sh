@@ -1303,7 +1303,7 @@ if [[ "$UPGRADE" == "1" || "$INSTALL" == "1" ]]; then
 			if [[ "x$answer" = "xy" ]]; then
 				reboot -f
 			fi
-		else
+		elif [[ "x$FROMANSIBLE" == "x" ]]; then
 			reboot -f
 		fi
 	fi
