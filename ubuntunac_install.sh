@@ -154,7 +154,7 @@ function install::basepkg()
 		bridge-utils dmidecode \
 		nmap ntpdate net-tools libc-ares2 lrzsz \
 		sysstat libtalloc2 iproute2 ansible \
-		httrack lsb-release ca-certificates
+		httrack lsb-release ca-certificates wireless-tools
 
 	if [[ "x$CODENAME" == "xnoble" ]]; then
 		util::install_packages util-linux-extra libaio1t64 libtirpc-dev libncurses6 libtinfo6 libpcre3-dev libpcap0.8t64 libjsoncpp25 libldap2
