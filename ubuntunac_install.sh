@@ -67,6 +67,7 @@ KERNELUP="${KERNELUP:-}"
 NETDRV="${NETDRV:-}"
 BIN="${BIN:-}"
 INSTALLISO="${INSTALLISO:-}"
+FROMANSIBLE="${FROMANSIBLE:-}"
 
 if [[ "x$KERNEL_FLAVOR" == "xaws" || "x$KERNEL_FLAVOR" == "xazure" ]]; then
 	SSHALLALLOW=1
