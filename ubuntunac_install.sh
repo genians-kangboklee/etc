@@ -34,7 +34,7 @@ LOGFILE=/var/log/nac_install.log
 echo "" > $LOGFILE
 exec > >(tee -a $LOGFILE) 2>&1
 
-TMP_DIR="$(rm -rf /tmp/upgrade* && mktemp -d -t upgrade.XXXXXXXXXX)"
+TMP_DIR="$(rm -rf /tmp/nacupgrade* && mktemp -d -t nacupgrade.XXXXXXXXXX)"
 
 export DEBIAN_FRONTEND=noninteractive
 
@@ -65,6 +65,8 @@ SSHPORT="${SSHPORT:-}"
 SSHALLALLOW="${SSHALLALLOW:-}"
 KERNELUP="${KERNELUP:-}"
 NETDRV="${NETDRV:-}"
+BIN="${BIN:-}"
+INSTALLISO="${INSTALLISO:-}"
 
 if [[ "x$KERNEL_FLAVOR" == "xaws" || "x$KERNEL_FLAVOR" == "xazure" ]]; then
 	SSHALLALLOW=1
@@ -76,8 +78,45 @@ if [[ "x$KERNEL_FLAVOR" == "xazure" ]]; then
 	NETDRV=hv_netvsc
 fi
 
+function util::ldconfig()
+{
+	if [[ "x$INSTALLISO" != "x" ]]; then
+		return 0
+	fi
+
+	ldconfig
+}
+
+function util::reconfigure_dpkg()
+{
+	if [[ "x$INSTALLISO" != "x" ]]; then
+		return 0
+	fi
+
+	dpkg --configure -a > /dev/null 2>&1
+}
+
+function util::fixbroken_apt()
+{
+	if [[ "x$INSTALLISO" != "x" ]] || [[ "x$BIN" != "x" ]]; then
+		return 0
+	fi
+	apt-get --fix-broken -y install ${DPKGCONFOPT} > /dev/null
+}
+
+function util::update_apt()
+{
+	if [[ "x$BIN" != "x" ]]; then
+		return 0
+	fi
+	apt-get update > /dev/null 2>&1
+}
+
 function util::install_packages()
 {
+	if [[ "x$BIN" != "x" ]]; then
+		return 0
+	fi
 	packages=("$@")
 	for package in "${packages[@]}"; do
 		util::info "Install... $package"
@@ -105,6 +144,78 @@ function util::install_packages()
 	done
 }
 
+function util::start_systemctl()
+{
+	if [[ "x$INSTALLISO" != "x" ]]; then
+		return 0
+	fi
+	services=("$@")
+	for service in "${services[@]}"; do
+		util::info "Start... $service"
+		systemctl start "$service" > /dev/null 2>&1
+	done
+}
+
+function util::stop_systemctl()
+{
+	if [[ "x$INSTALLISO" != "x" ]]; then
+		return 0
+	fi
+	services=("$@")
+	for service in "${services[@]}"; do
+		util::info "Stop... $service"
+		systemctl stop "$service" > /dev/null 2>&1
+	done
+}
+
+function util::enable_systemctl()
+{
+	if [[ "x$INSTALLISO" != "x" ]]; then
+		return 0
+	fi
+	services=("$@")
+	for service in "${services[@]}"; do
+		util::info "Enable... $service"
+		systemctl enable "$service" > /dev/null 2>&1
+	done
+}
+
+function util::disable_systemctl()
+{
+	if [[ "x$INSTALLISO" != "x" ]]; then
+		return 0
+	fi
+	services=("$@")
+	for service in "${services[@]}"; do
+		util::info "Disable... $service"
+		systemctl disable "$service" > /dev/null 2>&1
+	done
+}
+
+function util::mask_systemctl()
+{
+	if [[ "x$INSTALLISO" != "x" ]]; then
+		return 0
+	fi
+	services=("$@")
+	for service in "${services[@]}"; do
+		util::info "Mask... $service"
+		systemctl mask "$service" > /dev/null 2>&1
+	done
+}
+
+function util::unmask_systemctl()
+{
+	if [[ "x$INSTALLISO" != "x" ]]; then
+		return 0
+	fi
+	services=("$@")
+	for service in "${services[@]}"; do
+		util::info "UnMask... $service"
+		systemctl unmask "$service" > /dev/null 2>&1
+	done
+}
+
 PERCONA_VERSION="8.0.37-29-1"
 FILEBEAT_VERSION="7.17.25"
 ELASTIC_VERSION="6.8.6"
@@ -120,6 +231,9 @@ function util::getcodename()
 
 function util::setbash()
 {
+	if [[ "x$INSTALLISO" != "x" ]]; then
+		return 0
+	fi
 	rm -v /bin/sh > /dev/null 2>&1
 	ln -s /bin/bash /bin/sh
 }
@@ -128,21 +242,21 @@ function install::basepkg()
 {
 	/usr/geni/alder stop > /dev/null 2>&1
 	# procmon 종료
-	systemctl stop procmon.service > /dev/null 2>&1
+	util::stop_systemctl procmon.service
 
 	# 설치과정에서 적용된 apt proxy 설정 제거
 	#truncate -s 0 /etc/apt/apt.conf
 
-	systemctl stop rpcbind > /dev/null 2>&1
-	systemctl disable rpcbind > /dev/null 2>&1
-	systemctl mask rpcbind > /dev/null 2>&1
+	util::stop_systemctl rpcbind
+	util::disable_systemctl rpcbind
+	util::mask_systemctl rpcbind
 
-	systemctl stop snmpd snmptrapd apache2 ipsec strongswan-starter mysql elasticsearch winbind smbd \
-		samba-ad-dc nmbd tomcat8 tomcat9 tomcat10 syslog-ng nfs-server samba nmb > /dev/null 2>&1
-	systemctl mask snmpd snmptrapd apache2 ipsec strongswan-starter mysql elasticsearch winbind smbd \
-		samba-ad-dc nmbd tomcat8 tomcat9 tomcat10 syslog-ng nfs-server samba nmb > /dev/null 2>&1
+	util::stop_systemctl snmpd snmptrapd apache2 ipsec strongswan-starter mysql elasticsearch winbind smbd \
+		samba-ad-dc nmbd tomcat8 tomcat9 tomcat10 syslog-ng nfs-server samba nmb
+	util::mask_systemctl snmpd snmptrapd apache2 ipsec strongswan-starter mysql elasticsearch winbind smbd \
+		samba-ad-dc nmbd tomcat8 tomcat9 tomcat10 syslog-ng nfs-server samba nmb
 
-	apt-get update > /dev/null 2>&1
+	util::update_apt
 
 	util::install_packages vim dialog libpam-pwquality traceroute \
 		wget gnupg2 debsums libnuma1 psmisc curl libmecab2 cabextract \
@@ -189,20 +303,22 @@ function install::basepkg()
 		if [[ "x$CODENAME" == "xnoble" ]]; then
 			util::install_packages libapr1t64 libaprutil1t64 libodbc2
 			# 24.04 awscli
-			wget -q --show-progress -4 --no-check-certificate https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip -O ${TMP_DIR}/awscliv2.zip > /dev/null 2>&1
-			unzip -oq ${TMP_DIR}/awscliv2.zip -d ${TMP_DIR} > /dev/null 2>&1
-			${TMP_DIR}/aws/install > /dev/null 2>&1
-			if ! which aws > /dev/null 2>&1; then
-				util::error "awscli install failed."
-				exit -1
+			if [[ "x$BIN" == "x" ]]; then
+				wget -q --show-progress -4 --no-check-certificate https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip -O ${TMP_DIR}/awscliv2.zip > /dev/null 2>&1
+				unzip -oq ${TMP_DIR}/awscliv2.zip -d ${TMP_DIR} > /dev/null 2>&1
+				${TMP_DIR}/aws/install > /dev/null 2>&1
+				if ! which aws > /dev/null 2>&1; then
+					util::error "awscli install failed."
+					exit -1
+				fi
 			fi
 		else
 			util::install_packages libapr1 libaprutil1 awscli libodbc1
 		fi
 	fi
 
-	systemctl disable networkd-dispatcher > /dev/null 2>&1
-	systemctl stop networkd-dispatcher > /dev/null 2>&1
+	util::disable_systemctl networkd-dispatcher
+	util::stop_systemctl networkd-dispatcher
 
 	if [[ "x$PLATFORM_ARCH" == "xx86_64" ]]; then
 		VLANQ=`grep -E '^8021q' /etc/modules`
@@ -216,34 +332,36 @@ function install::basepkg()
 	# 기본 bond 인터페이스 생성
 	#echo -e "  bonds:\n    bond0:\n      dhcp4: no" >> /etc/netplan/01-netcfg.yaml
 
-	systemctl unmask unattended-upgrades > /dev/null 2>&1
+	util::unmask_systemctl unattended-upgrades
 	# 자동 설치 서비스 비활성화
-	systemctl stop unattended-upgrades > /dev/null 2>&1
-	systemctl disable unattended-upgrades > /dev/null 2>&1
-	apt -y purge --auto-remove unattended-upgrades > /dev/null 2>&1
-	systemctl stop apt-daily-upgrade.timer > /dev/null 2>&1
-	systemctl disable apt-daily-upgrade.timer > /dev/null 2>&1
-	systemctl mask apt-daily-upgrade.service > /dev/null 2>&1
-	systemctl stop apt-daily.timer > /dev/null 2>&1
-	systemctl disable apt-daily.timer > /dev/null 2>&1
-	systemctl mask apt-daily.service > /dev/null 2>&1
-	systemctl disable apt-daily.timer > /dev/null 2>&1
-	systemctl disable apt-daily.service > /dev/null 2>&1
-	systemctl disable apt-daily-upgrade.timer > /dev/null 2>&1
-	systemctl disable apt-daily-upgrade.service > /dev/null 2>&1
-	systemctl stop apt-daily.timer > /dev/null 2>&1
-	systemctl stop apt-daily.service > /dev/null 2>&1
-	systemctl stop apt-daily-upgrade.timer > /dev/null 2>&1
-	systemctl stop apt-daily-upgrade.service > /dev/null 2>&1
+	util::stop_systemctl unattended-upgrades
+	util::disable_systemctl unattended-upgrades
+	if [[ "x$INSTALLISO" != "x" ]]; then
+		apt -y purge --auto-remove unattended-upgrades > /dev/null 2>&1
+	fi
+	util::stop_systemctl apt-daily-upgrade.timer
+	util::disable_systemctl apt-daily-upgrade.timer
+	util::mask_systemctl apt-daily-upgrade.service
+	util::stop_systemctl apt-daily.timer
+	util::disable_systemctl apt-daily.timer
+	util::mask_systemctl apt-daily.service
+	util::disable_systemctl apt-daily.timer
+	util::disable_systemctl apt-daily.service
+	util::disable_systemctl apt-daily-upgrade.timer
+	util::disable_systemctl apt-daily-upgrade.service
+	util::stop_systemctl apt-daily.timer
+	util::stop_systemctl apt-daily.service
+	util::stop_systemctl apt-daily-upgrade.timer
+	util::stop_systemctl apt-daily-upgrade.service
 }
 
 function install::nacpkg()
 {
-	apt-get update > /dev/null 2>&1
+	util::update_apt
 
 	util::install_packages snmptrapd snmpd snmp
 
-	systemctl disable snmpd snmptrapd > /dev/null 2>&1
+	util::disable_systemctl snmpd snmptrapd
 
 	util::install_packages apache2 libapache2-mod-security2 libapache2-mod-qos
 
@@ -267,23 +385,23 @@ function install::nacpkg()
 	a2enmod proxy_connect > /dev/null
 
 	if [[ "$TARGET" != "GPC" ]]; then
-		systemctl unmask apache2 > /dev/null 2>&1
+		util::unmask_systemctl apache2
 		return 0
 	fi
 
 	# 설치하자마자 실행되는것을 방지하기 위해 mask
-	systemctl mask apache2 > /dev/null 2>&1
-	systemctl mask mysql > /dev/null 2>&1
-	systemctl mask tomcat9 > /dev/null 2>&1
-	systemctl mask tomcat8 > /dev/null 2>&1
-	systemctl mask tomcat10 > /dev/null 2>&1
-	systemctl mask elasticsearch > /dev/null 2>&1
-	systemctl mask winbind > /dev/null 2>&1
-	systemctl mask smbd > /dev/null 2>&1
-	systemctl mask samba-ad-dc > /dev/null 2>&1
-	systemctl mask nmbd > /dev/null 2>&1
-	systemctl mask nmb > /dev/null 2>&1
-	systemctl mask samba > /dev/null 2>&1
+	util::mask_systemctl apache2
+	util::mask_systemctl mysql
+	util::mask_systemctl tomcat9
+	util::mask_systemctl tomcat8
+	util::mask_systemctl tomcat10
+	util::mask_systemctl elasticsearch
+	util::mask_systemctl winbind
+	util::mask_systemctl smbd
+	util::mask_systemctl samba-ad-dc
+	util::mask_systemctl nmbd
+	util::mask_systemctl nmb
+	util::mask_systemctl samba
 
 	if [[ "x$CODENAME" == "xbionic" ]]; then
 		util::install_packages tomcat8 libmysql-java libmysqlclient20 libjemalloc1
@@ -296,6 +414,16 @@ function install::nacpkg()
 	fi
 
 	util::install_packages libnuma1 psmisc mysql-common libmecab2 zlib1g debsums
+
+	util::update_apt
+
+	PERCONA_VERSION=${PERCONA_VERSION}.${CODENAME}
+	if [[ "x$BIN" == "x" ]]; then
+		LATEST_PERCONA_VERSION=$(LANG=C apt-cache policy percona-server-server | awk '/Candidate:/ { print $2 }')
+		if [[ "x$LATEST_PERCONA_VERSION" != "x" ]]; then
+			PERCONA_VERSION=$LATEST_PERCONA_VERSION
+		fi
+	fi
 
 	echo "percona-server-server percona-server-server/root-pass password" | debconf-set-selections
 	echo "percona-server-server percona-server-server/re-root-pass password" | debconf-set-selections
@@ -315,33 +443,37 @@ function install::nacpkg()
 		dpkg -i ${TMP_DIR}/percona-server-server_8.0.18-9-1.bionic_amd64.deb
 	elif [[ "x$CODENAME" == "xfocal" || "x$CODENAME" == "xjammy" ]]; then
 		util::install_packages libgflags2.2
-		util::install_packages percona-server-common=${PERCONA_VERSION}.${CODENAME} libperconaserverclient21=${PERCONA_VERSION}.${CODENAME} \
-			percona-server-client=${PERCONA_VERSION}.${CODENAME} \
-			percona-server-server=${PERCONA_VERSION}.${CODENAME}
+		util::install_packages percona-server-common=${PERCONA_VERSION} libperconaserverclient21=${PERCONA_VERSION} \
+			percona-server-client=${PERCONA_VERSION} \
+			percona-server-server=${PERCONA_VERSION}
 	elif [[ "x$CODENAME" == "xnoble" ]]; then
-		apt remove -y libperconaserverclient* percona-server* --allow-change-held-packages > /dev/null 2>&1
+		if [[ "x$INSTALLISO" == "x" ]] && [[ "x$BIN" == "x" ]]; then
+			apt remove -y libperconaserverclient* percona-server* --allow-change-held-packages > /dev/null 2>&1
+		fi
 		ln -s libaio.so.1t64.0.2 /lib/x86_64-linux-gnu/libaio.so.1 > /dev/null 2>&1
 
-		util::install_packages percona-server-common=${PERCONA_VERSION}.${CODENAME} libperconaserverclient21=${PERCONA_VERSION}.${CODENAME} \
-			percona-server-client=${PERCONA_VERSION}.${CODENAME} \
-			percona-server-server=${PERCONA_VERSION}.${CODENAME}
+		util::install_packages percona-server-common=${PERCONA_VERSION} libperconaserverclient21=${PERCONA_VERSION} \
+			percona-server-client=${PERCONA_VERSION} \
+			percona-server-server=${PERCONA_VERSION}
 
-		#apt remove -y libperconaserverclient21 --allow-change-held-packages > /dev/null 2>&1
+		#if [[ "x$INSTALLISO" == "x" ]] && [[ "x$BIN" == "x" ]]; then
+			#apt remove -y libperconaserverclient21 --allow-change-held-packages > /dev/null 2>&1
+		#fi
 	fi
 
 	if [[ "x$CODENAME" == "xfocal" || "x$CODENAME" == "xjammy" || "x$CODENAME" == "xnoble" ]]; then
-		systemctl disable filebeat > /dev/null 2>&1
-		systemctl mask filebeat > /dev/null 2>&1
+		util::disable_systemctl filebeat
+		util::mask_systemctl filebeat
 		if [[ "x$(apt list --installed 2>/dev/null | grep filebeat)" == "x" ]]; then
 			echo "deb https://artifacts.elastic.co/packages/7.x/apt stable main" > /etc/apt/sources.list.d/elastic-7.x.list
-			apt-get update > /dev/null 2>&1
+			util::update_apt
 			util::install_packages filebeat=${FILEBEAT_VERSION}
 			rm -rf /etc/apt/sources.list.d/elastic-7.x.list > /dev/null 2>&1
-			apt-get update > /dev/null 2>&1
+			util::update_apt
 		fi
 	fi
 
-	apt-get update > /dev/null 2>&1
+	util::update_apt
 
 	if [[ "x$CODENAME" == "xfocal" || "x$CODENAME" == "xjammy" || "x$CODENAME" == "xnoble" ]]; then
 		# Java 17
@@ -360,33 +492,37 @@ function install::nacpkg()
 
 	apt-mark hold elasticsearch
 
-	systemctl unmask apache2 > /dev/null 2>&1
-	systemctl unmask mysql > /dev/null 2>&1
-	systemctl unmask tomcat9 > /dev/null 2>&1
-	systemctl unmask tomcat8 > /dev/null 2>&1
-	systemctl unmask tomcat10 > /dev/null 2>&1
-	systemctl unmask elasticsearch > /dev/null 2>&1
+	util::unmask_systemctl apache2
+	util::unmask_systemctl mysql
+	util::unmask_systemctl tomcat9
+	util::unmask_systemctl tomcat8
+	util::unmask_systemctl tomcat10
+	util::unmask_systemctl elasticsearch
 
-	systemctl disable winbind > /dev/null 2>&1
-	#systemctl unmask winbind > /dev/null 2>&1
-	systemctl disable smbd > /dev/null 2>&1
-	#systemctl unmask smbd > /dev/null 2>&1
-	systemctl disable samba-ad-dc > /dev/null 2>&1
-	#systemctl unmask samba-ad-dc > /dev/null 2>&1
-	systemctl disable nmbd > /dev/null 2>&1
-	#systemctl unmask nmbd > /dev/null 2>&1
-	systemctl disable nmb > /dev/null 2>&1
-	#systemctl unmask nmb > /dev/null 2>&1
-	systemctl disable samba > /dev/null 2>&1
-	#systemctl unmask samba > /dev/null 2>&1
+	util::disable_systemctl winbind
+	#util::unmask_systemctl winbind
+	util::disable_systemctl smbd
+	#util::unmask_systemctl smbd
+	util::disable_systemctl samba-ad-dc
+	#util::unmask_systemctl samba-ad-dc
+	util::disable_systemctl nmbd
+	#util::unmask_systemctl nmbd
+	util::disable_systemctl nmb
+	#util::unmask_systemctl nmb
+	util::disable_systemctl samba
+	#util::unmask_systemctl samba
 }
 
 function upgrade::kernel()
 {
 	local target=$1
 
+	if [[ "x$INSTALLISO" != "x" ]]; then
+		return 0
+	fi
+
 	#
-	apt-get update > /dev/null 2>&1
+	util::update_apt
 
 	local aptkernel=`apt-cache search linux-image-${target}$ | awk -F ' ' '{print $1}'`
 
@@ -421,6 +557,9 @@ function upgrade::config()
 {
 	ln -s /usr/sbin/iptables /sbin/iptables > /dev/null 2>&1
 
+	if [[ "x$INSTALLISO" != "x" ]]; then
+		return 0
+	fi
 	if [[ "$UPGRADE" == "1" ]]; then
 		return 0
 	fi
@@ -504,6 +643,10 @@ function upgrade::config()
 
 function upgrade::nac()
 {
+	if [[ "x$INSTALLISO" != "x" ]]; then
+		return 0
+	fi
+
 	if [[ "x$DOWNLOADTARGET" != "x" ]]; then
 		GDEB=$(/usr/bin/curl -# -w "%{filename_effective}" -SkLO ${DOWNLOADTARGET})
 		DEBPKGCODENAME=`dpkg-deb --info $GDEB | grep Subarchitecture | awk -F ' ' '{print $2}'`
@@ -520,7 +663,7 @@ function upgrade::nac()
 
 	#
 	echo -n '/usr/geni/lib' > /etc/ld.so.conf.d/${LDCONFNAC}
-	ldconfig
+	util::ldconfig
 
 	if [[ "x$LOCALE" != "x" ]]; then
 		sed -Ei "s#system-locale.*#system-locale=${LOCALE}#g" $LOCALCONF > /dev/null 2>&1
@@ -531,17 +674,17 @@ function upgrade::nac()
 
 	#
 	echo -n '/usr/geni/lib' > /etc/ld.so.conf.d/${LDCONFNAC}
-	ldconfig
-	
+	util::ldconfig
+
 	[[ ! -d /disk/sys/conf/certs || ! -f /disk/sys/conf/certs/server.crt || ! -f /disk/sys/conf/certs/ssl.cer || ! -f /disk/data/custom/ssl.cer ]] && { rm -rf /disk/sys/conf/certs > /dev/null 2>&1; /etc/init.d/gensslkey; }
 
-	systemctl enable syslog-ng > /dev/null 2>&1
+	util::enable_systemctl syslog-ng
 
 	ln -s /etc/apparmor.d/usr.sbin.mysqld /etc/apparmor.d/disable/ > /dev/null 2>&1
 	apparmor_parser -R /etc/apparmor.d/usr.sbin.mysqld > /dev/null 2>&1
 
-	#systemctl stop apparmor > /dev/null 2>&1
-	#systemctl disable apparmor > /dev/null 2>&1
+	#util::stop_systemctl apparmor
+	#util::disable_systemctl apparmor
 
 	if [[ "x$KERNELUP" != "xno" ]]; then
 		# 커널업그레이드
@@ -607,15 +750,19 @@ function upgrade::nac()
 
 function clean::pkg()
 {
+	if [[ "x$INSTALLISO" != "x" ]] || [[ "x$BIN" != "x" ]]; then
+		return 0
+	fi
+
 	apt -y purge --auto-remove tomcat8 --allow-change-held-packages > /dev/null 2>&1
-	systemctl disable tomcat8 > /dev/null 2>&1
+	util::disable_systemctl tomcat8
 	rm -rf /etc/systemd/system/tomcat8.service > /dev/null 2>&1
-	systemctl mask tomcat8 > /dev/null 2>&1
+	util::mask_systemctl tomcat8
 	apt -y purge --auto-remove openjdk-11-jre-headless > /dev/null 2>&1
 	apt -y purge --auto-remove tomcat9 --allow-change-held-packages > /dev/null 2>&1
-	systemctl disable tomcat9 > /dev/null 2>&1
+	util::disable_systemctl tomcat9
 	rm -rf /etc/systemd/system/tomcat9.service > /dev/null 2>&1
-	systemctl mask tomcat9 > /dev/null 2>&1
+	util::mask_systemctl tomcat9
 	apt -y purge --auto-remove openjdk-11-jre-headless > /dev/null 2>&1
 }
 
@@ -625,7 +772,7 @@ function clean::pkg()
 function init::env()
 {
 	# procmon 종료
-	systemctl stop procmon.service > /dev/null 2>&1
+	util::stop_systemctl procmon.service
 	/usr/geni/alder stop > /dev/null 2>&1
 
 	echo 'debconf debconf/frontend select Noninteractive' | debconf-set-selections
@@ -642,7 +789,7 @@ function init::env()
 
 	rm -rf /etc/ld.so.conf.d/genian-nac.conf > /dev/null 2>&1
 	rm -rf /etc/ld.so.conf.d/aaa-genian-nac.conf > /dev/null 2>&1
-	ldconfig
+	util::ldconfig
 }
 
 function hold::package()
@@ -675,24 +822,26 @@ function init::depends()
 
 	rm -rf /etc/systemd/system/{smbd*,samba*,nmb*} > /dev/null 2>&1
 
-	[[ -f /etc/samba/smb.conf ]] && { rm -rf /etc/samba/smb.conf; touch /etc/samba/smb.conf; rm -rf /etc/systemd/system/smbd.service; systemctl mask smbd.service > /dev/null 2>&1; }
-	[[ -f /etc/systemd/system/nmbd.service ]] && { rm -rf /etc/systemd/system/nmbd.service; systemctl mask nmbd.service > /dev/null 2>&1; }
-	[[ -f /etc/systemd/system/winbind.service ]] && { rm -rf /etc/systemd/system/winbind.service; systemctl mask winbind.service > /dev/null 2>&1; }
-	[[ -f /etc/systemd/system/mysql.service ]] && { rm -rf /etc/systemd/system/mysql.service; systemctl mask mysql.service > /dev/null 2>&1; }
-	[[ -f /etc/systemd/system/elasticsearch.service ]] && { rm -rf /etc/systemd/system/elasticsearch.service; systemctl mask elasticsearch.service > /dev/null 2>&1; }
-	[[ -f /etc/systemd/system/apache2.service ]] && { rm -rf /etc/systemd/system/apache2.service; systemctl mask apache2.service > /dev/null 2>&1; }
+	[[ -f /etc/samba/smb.conf ]] && { rm -rf /etc/samba/smb.conf; touch /etc/samba/smb.conf; rm -rf /etc/systemd/system/smbd.service; util::mask_systemctl smbd.service; }
+	[[ -f /etc/systemd/system/nmbd.service ]] && { rm -rf /etc/systemd/system/nmbd.service; util::mask_systemctl nmbd.service; }
+	[[ -f /etc/systemd/system/winbind.service ]] && { rm -rf /etc/systemd/system/winbind.service; util::mask_systemctl winbind.service; }
+	[[ -f /etc/systemd/system/mysql.service ]] && { rm -rf /etc/systemd/system/mysql.service; util::mask_systemctl mysql.service; }
+	[[ -f /etc/systemd/system/elasticsearch.service ]] && { rm -rf /etc/systemd/system/elasticsearch.service; util::mask_systemctl elasticsearch.service; }
+	[[ -f /etc/systemd/system/apache2.service ]] && { rm -rf /etc/systemd/system/apache2.service; util::mask_systemctl apache2.service; }
 
-	systemctl stop smbd winbind samba-ad-dc nmbd nmb samba > /dev/null 2>&1
-	systemctl mask smbd winbind samba-ad-dc nmbd nmb samba > /dev/null 2>&1
+	util::stop_systemctl smbd winbind samba-ad-dc nmbd nmb samba
+	util::mask_systemctl smbd winbind samba-ad-dc nmbd nmb samba
 
-	apt-get update > /dev/null 2>&1
-	apt-get --fix-broken -y install ${DPKGCONFOPT} > /dev/null
+	util::update_apt
+	util::fixbroken_apt
 
-	# syslog-ng-core 때문에 설치가 실패하는 문제가 있음
-	apt remove --purge -y syslog-ng* > /dev/null 2>&1
-	rm -rf /etc/syslog-ng
-	rm -rf /etc/systemd/system/syslog-ng.service
-	systemctl mask syslog-ng.service
+	if [[ "x$INSTALLISO" != "x" ]] && [[ "x$BIN" != "x" ]]; then
+		# syslog-ng-core 때문에 설치가 실패하는 문제가 있음
+		apt remove --purge -y syslog-ng* > /dev/null 2>&1
+		rm -rf /etc/syslog-ng
+		rm -rf /etc/systemd/system/syslog-ng.service
+		util::mask_systemctl syslog-ng.service
+	fi
 
 	util::install_packages curl
 }
@@ -700,6 +849,9 @@ function init::depends()
 # sources.list 초기화
 function init::sourcelist()
 {
+	if [[ "x$INSTALLISO" != "x" ]] || [[ "x$BIN" != "x" ]]; then
+		return 0
+	fi
 	# genian-nac 에서 사용하던것 삭제
 	rm -rf /etc/apt/sources.list.d/genian*
 	rm -rf /etc/apt/sources.list.d/elastic-*
@@ -863,18 +1015,25 @@ EOF
 
 function clean::apt()
 {
+	if [[ "x$INSTALLISO" != "x" ]] || [[ "x$BIN" != "x" ]]; then
+		return 0
+	fi
+
 	apt remove -y libperconaserverclient* percona-release percona-server* --allow-change-held-packages > /dev/null 2>&1
 	apt-get clean
 }
 
 function update::currentpkg()
 {
+	if [[ "x$INSTALLISO" != "x" ]] || [[ "x$BIN" != "x" ]]; then
+		return 0
+	fi
 	if [[ "$UPGRADE" != "1" ]]; then
 		return 0
 	fi
 
-	apt-get update > /dev/null 2>&1
-	apt --fix-broken -y install ${DPKGCONFOPT} > /dev/null
+	util::update_apt
+	util::fixbroken_apt
 	apt -y upgrade ${DPKGCONFOPT} > /dev/null 2>&1
 	apt -y dist-upgrade ${DPKGCONFOPT}
 }
@@ -882,6 +1041,10 @@ function update::currentpkg()
 function upgrade::sourcelist()
 {
 	local target=$1
+
+	if [[ "x$BIN" != "x" ]]; then
+		return 0
+	fi
 
 	sed -i "s/bionic/${target}/g" /etc/apt/sources.list > /dev/null 2>&1
 	sed -i "s/bionic/${target}/g" /etc/apt/sources.list.d/* > /dev/null 2>&1
@@ -901,6 +1064,9 @@ function upgrade::sourcelist()
 
 function install::repo()
 {
+	if [[ "x$BIN" != "x" ]]; then
+		return 0
+	fi
 	if [[ "$TARGET" != "GPC" ]]; then
 		return
 	fi
@@ -923,7 +1089,7 @@ function install::repo()
 					/etc/apt/sources.list.d/percona-prel-release.list /etc/apt/sources.list.d/percona-ps-80-release.list /etc/apt/sources.list.d/percona-tools-release.list
 			fi
 
-			apt-get update > /dev/null 2>&1
+			util::update_apt
 		fi
 		return
 	fi
@@ -939,12 +1105,16 @@ function install::repo()
 	#echo "deb https://artifacts.elastic.co/packages/7.x/apt stable main" > /etc/apt/sources.list.d/elastic-7.x.list
 	echo "deb https://artifacts.elastic.co/packages/6.x/apt stable main" > /etc/apt/sources.list.d/elastic-6.x.list
 
-	apt-get update > /dev/null 2>&1
+	util::update_apt
 }
 
 function upgrade::rel()
 {
 	local target=$1
+
+	if [[ "x$INSTALLISO" != "x" ]] || [[ "x$BIN" != "x" ]]; then
+		return 0
+	fi
 
 	update::currentpkg
 
@@ -955,15 +1125,9 @@ function upgrade::rel()
 
 	upgrade::sourcelist "${target}"
 
-	# syslog-ng-core 때문에 설치가 실패하는 문제가 있음
-	#apt remove --purge -y syslog-ng* > /dev/null 2>&1
-	#rm -rf /etc/syslog-ng
-	#rm -rf /etc/systemd/system/syslog-ng.service
-	#systemctl mask syslog-ng.service
-
 	apt-get clean > /dev/null 2>&1
-	apt-get update > /dev/null 2>&1
-	apt --fix-broken -y install ${DPKGCONFOPT} > /dev/null
+	util::update_apt
+	util::fixbroken_apt
 	apt -y dist-upgrade ${DPKGCONFOPT}
 
 	apt-get install -y ubuntu-release-upgrader-core > /dev/null 2>&1
@@ -980,7 +1144,7 @@ function upgrade::rel()
 		apt-get install -y --reinstall libssl3 > /dev/null 2>&1
 	fi
 
-	ldconfig
+	util::ldconfig
 	cp -f /etc/lsb-release.dpkg-dist /etc/lsb-release > /dev/null 2>&1
 }
 
@@ -1125,21 +1289,25 @@ util::info "LOCALE=$LOCALE"
 util::info "TIMEZONE=$TIMEZONE"
 util::info "REL=$REL"
 util::info "DEB=$DEB"
+util::info "INSTALLISO=$INSTALLISO"
+util::info "BIN=$BIN"
 
 if [[ "x$FACTORYINSTALL" != "x1" ]]; then
 	# check dpkg lock
-	PKGLOCK=`lsof /var/lib/dpkg/lock`
+	PKGLOCK=`lsof /var/lib/dpkg/lock 2>/dev/null`
 	if [[ "x$PKGLOCK" != "x" ]]; then
 		util::error "Could not get lock /var/lib/dpkg/lock"
 		exit -1
 	fi
 fi
 
-unset LD_LIBRARY_PATH
+if [[ "x$INSTALLISO" != "x" ]]; then
+	unset LD_LIBRARY_PATH
+fi
 
-dpkg --configure -a > /dev/null 2>&1
-apt-get --fix-broken -y install ${DPKGCONFOPT} > /dev/null
-apt-get update > /dev/null 2>&1
+util::reconfigure_dpkg
+util::fixbroken_apt
+util::update_apt
 #apt -y upgrade
 util::install_packages lsof net-tools lsb-release
 
@@ -1273,7 +1441,7 @@ if [[ "$UPGRADE" == "1" || "$INSTALL" == "1" ]]; then
 
 	util::setbash
 
-	apt-get update > /dev/null 2>&1
+	util::update_apt
 
 	install::basepkg
 
@@ -1289,14 +1457,14 @@ if [[ "$UPGRADE" == "1" || "$INSTALL" == "1" ]]; then
 
 	util::setbash
 
-	# remove netplan
 	rm -rf /etc/netplan/*
 
-	apt remove -y landscape-common > /dev/null 2>&1
+	if [[ "x$INSTALLISO" != "x" ]]; then
+		apt remove -y landscape-common > /dev/null 2>&1
+	fi
 
 	if [[ "x$FACTORYINSTALL" != "x1" ]]; then
 		sync
-
 		if [[ "$PROMPT" == "1" ]]; then
 			printf "Genians $TARGET installed. now reboot (y/n)?"
 			read answer < /dev/tty
