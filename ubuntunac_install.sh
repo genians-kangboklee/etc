@@ -269,7 +269,7 @@ function install::basepkg()
 		bridge-utils dmidecode \
 		nmap ntpdate net-tools libc-ares2 lrzsz \
 		sysstat libtalloc2 iproute2 ansible \
-		httrack lsb-release ca-certificates wireless-tools
+		httrack lsb-release ca-certificates iw wireless-tools
 
 	if [[ "x$CODENAME" == "xnoble" ]]; then
 		util::install_packages util-linux-extra libaio1t64 libtirpc-dev libncurses6 libtinfo6 libpcre3-dev libpcap0.8t64 libjsoncpp25 libldap2
@@ -1459,6 +1459,9 @@ if [[ "$UPGRADE" == "1" || "$INSTALL" == "1" ]]; then
 	util::setbash
 
 	rm -rf /etc/netplan/*
+	rm -rf /etc/NetworkManager/NetworkManager.conf
+	util::disable_systemctl NetworkManager
+	util::disable_systemctl ModemManager
 
 	if [[ "x$INSTALLISO" != "x" ]]; then
 		apt remove -y landscape-common > /dev/null 2>&1
