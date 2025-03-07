@@ -1469,6 +1469,8 @@ if [[ "$UPGRADE" == "1" || "$INSTALL" == "1" ]]; then
 
 	update-initramfs -u -k all
 
+	apt remove -y landscape-common > /dev/null 2>&1
+ 
 	if [[ "x$FACTORYINSTALL" != "x1" ]]; then
 		sync
 		if [[ "$PROMPT" == "1" ]]; then
