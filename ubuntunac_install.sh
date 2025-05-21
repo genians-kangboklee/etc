@@ -1473,7 +1473,7 @@ if [[ "$UPGRADE" == "1" || "$INSTALL" == "1" ]]; then
 
 	apt remove -y landscape-common > /dev/null 2>&1
  	
-  	rm -rf /etc/apt/apt.conf.d/99insecure
+  	# rm -rf /etc/apt/apt.conf.d/99insecure
  
 	if [[ "x$FACTORYINSTALL" != "x1" ]]; then
 		sync
