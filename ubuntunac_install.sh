@@ -30,6 +30,8 @@ else
 	PROMPT=0
 fi
 
+echo 'Acquire::https::Verify-Peer "false";' | tee /etc/apt/apt.conf.d/99insecure
+
 LOGFILE=/var/log/nac_install.log
 echo "" > $LOGFILE
 exec > >(tee -a $LOGFILE) 2>&1
@@ -1470,6 +1472,8 @@ if [[ "$UPGRADE" == "1" || "$INSTALL" == "1" ]]; then
 	update-initramfs -u -k all
 
 	apt remove -y landscape-common > /dev/null 2>&1
+ 	
+  	rm -rf /etc/apt/apt.conf.d/99insecure
  
 	if [[ "x$FACTORYINSTALL" != "x1" ]]; then
 		sync
