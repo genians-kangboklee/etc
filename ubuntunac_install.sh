@@ -1464,6 +1464,10 @@ if [[ "$UPGRADE" == "1" || "$INSTALL" == "1" ]]; then
 	rm -rf /etc/NetworkManager/NetworkManager.conf
 	util::disable_systemctl NetworkManager
 	util::disable_systemctl ModemManager
+ 
+ 	systemctl stop percona-telemetry-agent.service > /dev/null 2>&1
+  	systemctl disable percona-telemetry-agent.service > /dev/null 2>&1
+   	systemctl mask percona-telemetry-agent.service > /dev/null 2>&1
 
 	if [[ "x$INSTALLISO" != "x" ]]; then
 		apt remove -y landscape-common > /dev/null 2>&1
