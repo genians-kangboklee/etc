@@ -306,7 +306,7 @@ function install::basepkg()
 		if [[ "x$CODENAME" == "xnoble" ]]; then
 			util::install_packages libapr1t64 libaprutil1t64 libodbc2
 			# 24.04 awscli
-			if [[ "x$BIN" == "x" ]]; then
+			if [[ "x$REPO_MIRROR" == "x" ]] && [[ "x$BIN" == "x" ]]; then
 				wget -q --show-progress -4 --no-check-certificate https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip -O ${TMP_DIR}/awscliv2.zip > /dev/null 2>&1
 				unzip -oq ${TMP_DIR}/awscliv2.zip -d ${TMP_DIR} > /dev/null 2>&1
 				${TMP_DIR}/aws/install > /dev/null 2>&1
@@ -469,6 +469,12 @@ function install::nacpkg()
 		util::mask_systemctl filebeat
 		if [[ "x$(apt list --installed 2>/dev/null | grep filebeat)" == "x" ]]; then
 			echo "deb https://artifacts.elastic.co/packages/7.x/apt stable main" > /etc/apt/sources.list.d/elastic-7.x.list
+			if [[ "x$REPO_MIRROR" != "x" ]]; then
+				echo "deb http://$REPO_MIRROR/artifacts.elastic.co/packages/7.x/apt stable main" > /etc/apt/sources.list.d/elastic-7.x.list
+			fi
+			if [[ "$LOCAL_MIRROR" == "1" ]]; then
+				sed -i -e "s#http:/#[trusted=yes] file:#g" -e "s#https:/#[trusted=yes] file:#g" /etc/apt/sources.list.d/elastic-7.x.list
+			fi
 			util::update_apt
 			util::install_packages filebeat=${FILEBEAT_VERSION}
 			rm -rf /etc/apt/sources.list.d/elastic-7.x.list > /dev/null 2>&1
@@ -1010,7 +1016,7 @@ EOF
 
 	# LOCAL_MIRROR 는 저장장치에 repository 가 구성되어있음
 	if [[ "$LOCAL_MIRROR" == "1" ]]; then
-		sed -i -e "s#http:/#file:#g" -e "s#https:/#file:#g" /etc/apt/sources.list \
+		sed -i -e "s#http:/#[trusted=yes] file:#g" -e "s#https:/#[trusted=yes] file:#g" /etc/apt/sources.list \
 			/etc/apt/sources.list.d/elastic-7.x.list /etc/apt/sources.list.d/elastic-6.x.list \
 			/etc/apt/sources.list.d/percona-prel-release.list /etc/apt/sources.list.d/percona-ps-80-release.list /etc/apt/sources.list.d/percona-tools-release.list
 	fi
@@ -1088,8 +1094,8 @@ function install::repo()
 
 			# LOCAL_MIRROR 는 저장장치에 repository 가 구성되어있음
 			if [[ "$LOCAL_MIRROR" == "1" ]]; then
-				sed -i -e "s#http:/#file:#g" -e "s#https:/#file:#g" /etc/apt/sources.list.d/elastic-7.x.list /etc/apt/sources.list.d/elastic-6.x.list \
-					/etc/apt/sources.list.d/percona-prel-release.list /etc/apt/sources.list.d/percona-ps-80-release.list /etc/apt/sources.list.d/percona-tools-release.list
+				sed -i -e "s#http:/#[trusted=yes] file:#g" -e "s#https:/#[trusted=yes] file:#g" /etc/apt/sources.list.d/elastic-7.x.list /etc/apt/sources.list.d/elastic-6.x.list \
+					/etc/apt/sources.list.d/percona-prel-release.list /etc/apt/sources.list.d/percona-ps-80-release.list /etc/apt/sources.list.d/percona-tools-release.list > /dev/null 2>&1
 			fi
 
 			util::update_apt
