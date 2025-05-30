@@ -874,10 +874,10 @@ function init::sourcelist()
 	# bionic 에서 시작
 	echo -n "" > /etc/apt/sources.list
 	echo "deb http://ports.ubuntu.com/ubuntu-ports bionic main restricted" >> /etc/apt/sources.list
-	echo "deb http://ports.ubuntu.com/ubuntu-ports bionic-updates main restricted" >> /etc/apt/sources.list
 	echo "deb http://ports.ubuntu.com/ubuntu-ports bionic universe" >> /etc/apt/sources.list
-	echo "deb http://ports.ubuntu.com/ubuntu-ports bionic-updates universe" >> /etc/apt/sources.list
 	echo "deb http://ports.ubuntu.com/ubuntu-ports bionic multiverse" >> /etc/apt/sources.list
+	echo "deb http://ports.ubuntu.com/ubuntu-ports bionic-updates main restricted" >> /etc/apt/sources.list
+	echo "deb http://ports.ubuntu.com/ubuntu-ports bionic-updates universe" >> /etc/apt/sources.list
 	echo "deb http://ports.ubuntu.com/ubuntu-ports bionic-updates multiverse" >> /etc/apt/sources.list
 	echo "deb http://ports.ubuntu.com/ubuntu-ports bionic-backports main restricted universe multiverse" >> /etc/apt/sources.list
 	echo "deb http://ports.ubuntu.com/ubuntu-ports bionic-security main restricted" >> /etc/apt/sources.list
