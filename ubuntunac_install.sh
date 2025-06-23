@@ -70,6 +70,8 @@ NETDRV="${NETDRV:-}"
 BIN="${BIN:-}"
 INSTALLISO="${INSTALLISO:-}"
 FROMANSIBLE="${FROMANSIBLE:-}"
+CONNECT_TIMEOUT="${CONNECT_TIMEOUT:-60}" # Default to 60 seconds (1 minutes)
+MAX_RETRIES="${MAX_RETRIES:-3}" # Default to 3 retry attempts
 
 if [[ "x$KERNEL_FLAVOR" == "xaws" || "x$KERNEL_FLAVOR" == "xazure" ]]; then
 	SSHALLALLOW=1
@@ -311,7 +313,12 @@ function install::basepkg()
 			util::install_packages libapr1t64 libaprutil1t64 libodbc2
 			# 24.04 awscli
 			if [[ "x$REPO_MIRROR" == "x" ]] && [[ "x$BIN" == "x" ]]; then
-				wget -q --show-progress -4 --no-check-certificate https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip -O ${TMP_DIR}/awscliv2.zip > /dev/null 2>&1
+				util::info "Install... awscli v2"
+				/usr/bin/curl -# -4 --connect-timeout $CONNECT_TIMEOUT --retry $MAX_RETRIES -SkL https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip -o ${TMP_DIR}/awscliv2.zip
+				if [ $? -ne 0 ]; then
+					util::error "Failed to download awscli v2 after $MAX_RETRIES attempts."
+					exit -1
+				fi
 				unzip -oq ${TMP_DIR}/awscliv2.zip -d ${TMP_DIR} > /dev/null 2>&1
 				${TMP_DIR}/aws/install > /dev/null 2>&1
 				if ! which aws > /dev/null 2>&1; then
@@ -440,13 +447,21 @@ function install::nacpkg()
 
 	PS_DOWNLOADURL="https://downloads.percona.com/downloads/Percona-Server-8.0/Percona-Server-8.0.18-9/binary/debian/bionic/x86_64"
 	if [[ "x$CODENAME" == "xbionic" ]]; then
-		wget -4 --no-check-certificate ${PS_DOWNLOADURL}/percona-server-common_8.0.18-9-1.bionic_amd64.deb -O ${TMP_DIR}/percona-server-common_8.0.18-9-1.bionic_amd64.deb
+		util::info "Install... percona-server"
+		/usr/bin/curl -# -4 --connect-timeout $CONNECT_TIMEOUT --retry $MAX_RETRIES -SkL ${PS_DOWNLOADURL}/percona-server-common_8.0.18-9-1.bionic_amd64.deb -o ${TMP_DIR}/percona-server-common_8.0.18-9-1.bionic_amd64.deb
+		if [ $? -ne 0 ]; then util::error "Failed to download Percona Server common package."; exit -1; fi
 		dpkg -i ${TMP_DIR}/percona-server-common_8.0.18-9-1.bionic_amd64.deb
-		wget -4 --no-check-certificate ${PS_DOWNLOADURL}/libperconaserverclient21_8.0.18-9-1.bionic_amd64.deb -O ${TMP_DIR}/libperconaserverclient21_8.0.18-9-1.bionic_amd64.deb
+
+		/usr/bin/curl -# -4 --connect-timeout $CONNECT_TIMEOUT --retry $MAX_RETRIES -SkL ${PS_DOWNLOADURL}/libperconaserverclient21_8.0.18-9-1.bionic_amd64.deb -o ${TMP_DIR}/libperconaserverclient21_8.0.18-9-1.bionic_amd64.deb
+		if [ $? -ne 0 ]; then util::error "Failed to download Percona Server client library."; exit -1; fi
 		dpkg -i ${TMP_DIR}/libperconaserverclient21_8.0.18-9-1.bionic_amd64.deb
-		wget -4 --no-check-certificate ${PS_DOWNLOADURL}/percona-server-client_8.0.18-9-1.bionic_amd64.deb -O ${TMP_DIR}/percona-server-client_8.0.18-9-1.bionic_amd64.deb
+
+		/usr/bin/curl -# -4 --connect-timeout $CONNECT_TIMEOUT --retry $MAX_RETRIES -SkL ${PS_DOWNLOADURL}/percona-server-client_8.0.18-9-1.bionic_amd64.deb -o ${TMP_DIR}/percona-server-client_8.0.18-9-1.bionic_amd64.deb
+		if [ $? -ne 0 ]; then util::error "Failed to download Percona Server client package."; exit -1; fi
 		dpkg -i ${TMP_DIR}/percona-server-client_8.0.18-9-1.bionic_amd64.deb
-		wget -4 --no-check-certificate ${PS_DOWNLOADURL}/percona-server-server_8.0.18-9-1.bionic_amd64.deb -O ${TMP_DIR}/percona-server-server_8.0.18-9-1.bionic_amd64.deb
+
+		/usr/bin/curl -# -4 --connect-timeout $CONNECT_TIMEOUT --retry $MAX_RETRIES -SkL ${PS_DOWNLOADURL}/percona-server-server_8.0.18-9-1.bionic_amd64.deb -o ${TMP_DIR}/percona-server-server_8.0.18-9-1.bionic_amd64.deb
+		if [ $? -ne 0 ]; then util::error "Failed to download Percona Server server package."; exit -1; fi
 		dpkg -i ${TMP_DIR}/percona-server-server_8.0.18-9-1.bionic_amd64.deb
 	elif [[ "x$CODENAME" == "xfocal" || "x$CODENAME" == "xjammy" ]]; then
 		util::install_packages libgflags2.2
@@ -661,7 +676,11 @@ function upgrade::nac()
 	fi
 
 	if [[ "x$DOWNLOADTARGET" != "x" ]]; then
-		GDEB=$(/usr/bin/curl -# -w "%{filename_effective}" -SkLO ${DOWNLOADTARGET})
+		GDEB=$(/usr/bin/curl -# --connect-timeout $CONNECT_TIMEOUT --retry $MAX_RETRIES -w "%{filename_effective}" -SkLO ${DOWNLOADTARGET})
+		if [ $? -ne 0 ]; then
+			util::error "Failed to download NAC package from ${DOWNLOADTARGET} after $MAX_RETRIES attempts."
+			exit -1
+		fi
 		DEBPKGCODENAME=`dpkg-deb --info $GDEB | grep Subarchitecture | awk -F ' ' '{print $2}'`
 		if [[ "x$DEBPKGCODENAME" != "x" ]] && [[ "$DEBPKGCODENAME" != "$CODENAME" ]]; then
 			echo "Ubuntu CodeName error. $DEBPKGCODENAME != $CODENAME"
@@ -1107,14 +1126,18 @@ function install::repo()
 		return
 	fi
 
-	wget -4 --show-progress --no-check-certificate -qO ${TMP_DIR}/percona-release_latest.$(lsb_release -sc 2>/dev/null)_all.deb https://repo.percona.com/percona/apt/percona-release_latest.$(lsb_release -sc 2>/dev/null)_all.deb > /dev/null 2>&1
+	/usr/bin/curl -# -4 --connect-timeout $CONNECT_TIMEOUT --retry $MAX_RETRIES -SkL https://repo.percona.com/percona/apt/percona-release_latest.$(lsb_release -sc 2>/dev/null)_all.deb -o ${TMP_DIR}/percona-release_latest.$(lsb_release -sc 2>/dev/null)_all.deb
+	if [ $? -ne 0 ]; then
+		util::error "Failed to download Percona release package after $MAX_RETRIES attempts."
+		exit -1
+	fi
 	dpkg -i --force-overwrite ${TMP_DIR}/percona-release_latest.$(lsb_release -sc 2>/dev/null)_all.deb > /dev/null 2>&1
 	if ! percona-release setup ps80 > /dev/null 2>&1; then
 		util::error "percona-release setup failed."
 		exit -1
 	fi
 
-	wget -4 --no-check-certificate -qO - https://artifacts.elastic.co/GPG-KEY-elasticsearch | apt-key add - 2>/dev/null
+	wget -4 --connect-timeout=$CONNECT_TIMEOUT --tries=$MAX_RETRIES --no-check-certificate -qO - https://artifacts.elastic.co/GPG-KEY-elasticsearch | apt-key add - 2>/dev/null
 	#echo "deb https://artifacts.elastic.co/packages/7.x/apt stable main" > /etc/apt/sources.list.d/elastic-7.x.list
 	echo "deb https://artifacts.elastic.co/packages/6.x/apt stable main" > /etc/apt/sources.list.d/elastic-6.x.list
 
@@ -1414,8 +1437,13 @@ if [[ "$UPGRADE" == "1" || "$INSTALL" == "1" ]]; then
 		fi
 		printf "	DEB $LOCALTARGET $DOWNLOADTARGET\n"
 		if [[ "x$DOWNLOADTARGET" != "x" ]]; then
-			if ( /usr/bin/curl -o/dev/null -sfI "$DOWNLOADTARGET" ); then
-				GDEB=$(/usr/bin/curl -# -w "%{filename_effective}" -SkLO ${DOWNLOADTARGET})
+			if ( /usr/bin/curl -o/dev/null -sfI --connect-timeout $CONNECT_TIMEOUT --retry $MAX_RETRIES "$DOWNLOADTARGET" ); then
+				GDEB=$(/usr/bin/curl -# --connect-timeout $CONNECT_TIMEOUT --retry $MAX_RETRIES -w "%{filename_effective}" -SkLO ${DOWNLOADTARGET})
+				if [ $? -ne 0 ]; then
+					util::error "Failed to download NAC package from ${DOWNLOADTARGET} after $MAX_RETRIES attempts."
+					rm $GDEB
+					exit -1
+				fi
 				DEBPKGCODENAME=`dpkg-deb --info $GDEB | grep Subarchitecture | awk -F ' ' '{print $2}'`
 				if [[ "x$DEBPKGCODENAME" != "x" ]] && [[ "$DEBPKGCODENAME" != "$CODENAME" ]]; then
 					echo "Ubuntu CodeName error. $DEBPKGCODENAME != $CODENAME"
@@ -1428,6 +1456,7 @@ if [[ "$UPGRADE" == "1" || "$INSTALL" == "1" ]]; then
 				[[ "x$DEBPKGTARGET" == "xgenian-nac-ns" ]] && [[ "x$TARGET" == "xGPC" ]] && util::error "$TARGET cannot be installed because the package is a network sensor." && rm $GDEB && exit -1
 				[[ "x$DEBPKGTARGET" == "xgenian-nac" ]] && [[ "x$TARGET" == "xGNS" ]] && util::error "$TARGET cannot be installed because the package is a policy center." && rm $GDEB && exit -1
 			else
+				util::error "NAC package not found at ${DOWNLOADTARGET} after $MAX_RETRIES attempts."
 				echo "$DOWNLOADTARGET not exist"
 				exit -1
 			fi
