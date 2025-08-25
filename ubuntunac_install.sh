@@ -1299,6 +1299,12 @@ while [ "${1:-}" != "" ]; do
   shift
 done
 
+if [[ "x$TARGET" == "x" && "$DEB" == *UBUNTUNS* ]]; then
+	TARGET=GNS
+elif [[ "x$TARGET" == "x" && "$DEB" == *UBUNTU* ]]; then
+	TARGET=GPC
+fi
+
 CODENAME=$(util::getcodename)
 DPKGARCH=`dpkg --print-architecture`
 
