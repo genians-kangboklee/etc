@@ -578,6 +578,7 @@ function upgrade::kernel()
 		return 0
 	fi
 	sed -i "s/GRUB_DEFAULT=.*/GRUB_DEFAULT=\"${grubmenu}>${grubentry}\"/g" /etc/default/grub
+	rm -rf /etc/default/grub.d/99-custom-kernel.cfg
 	update-grub2
 }
 
