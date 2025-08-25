@@ -1411,13 +1411,19 @@ if [[ "x$DEB" == "xv5" || "x$DEB" == "xnac" ]]; then
 	else
 		DEB=$DEB/NAC-UBUNTUNS-R-current.${CODENAME}_${DPKGARCH}.deb
 	fi
-fi
-if [[ "x$DEB" == "xv6" || "x$DEB" == "xztna" ]]; then
+elif [[ "x$DEB" == "xv6" || "x$DEB" == "xztna" ]]; then
 	DEB=https://d1s536j2uzv1h7.cloudfront.net/images/NAC/GNOS/v6.0/RELEASE
 	if [ "x$TARGET" = "xGPC" ]; then
 		DEB=$DEB/NAC-UBUNTU-R-current.${CODENAME}_${DPKGARCH}.deb
 	else
 		DEB=$DEB/NAC-UBUNTUNS-R-current.${CODENAME}_${DPKGARCH}.deb
+	fi
+elif [[ "$DEB" != http* && "$DEB" != */* && ! -f "$DEB" ]]; then
+	NV=$(echo "$DEB" | grep -oP '\d+\.\d+\.\d+')
+	if [[ "$NV" == 6* ]]; then
+		DEB=https://d1s536j2uzv1h7.cloudfront.net/images/NAC/GNOS/v6.0/RELEASE/$NV/$DEB.${CODENAME}_${DPKGARCH}.deb
+	else
+		DEB=https://d1s536j2uzv1h7.cloudfront.net/images/NAC/GNOS/v5.0/RELEASE/$NV/$DEB.${CODENAME}_${DPKGARCH}.deb
 	fi
 fi
 
