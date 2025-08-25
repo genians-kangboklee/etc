@@ -589,7 +589,7 @@ function upgrade::config()
 	if [[ "x$INSTALLISO" != "x" ]]; then
 		return 0
 	fi
-	if [[ "$UPGRADE" == "1" ]]; then
+	if [[ -f $LOCALCONF && "$UPGRADE" == "1" ]]; then
 		return 0
 	fi
 
