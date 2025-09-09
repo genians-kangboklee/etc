@@ -7,7 +7,14 @@ set -o pipefail         # Use last non-zero exit code in a pipeline
 
 RED='\033[0;31m'
 BLU='\033[0;34m'
+YEL='\033[0;33m'
 NC='\033[0m' # No Color
+
+INSTALL_DIR="/disk/sys/boot/.install"
+
+function util::warn() {
+	echo -e "${YEL}WARN: $1${NC}" >&2
+}
 
 function util::error() {
 	echo -e "${RED}ERR: $1${NC}" >&2
@@ -15,6 +22,15 @@ function util::error() {
 
 function util::info() {
 	echo -e "${BLU}INF: $1${NC}"
+}
+
+function util::print_file() {
+	local file="$1"
+	if [ ! -f "$file" ]; then
+		util::error "$file not found."
+		return 1
+	fi
+	cat "$file"
 }
 
 FACTORYINSTALL="${FACTORYINSTALL:-0}"
@@ -50,6 +66,10 @@ PROMPT="${PROMPT:-1}"
 DPKGCONFOPT="-o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold -o Dpkg::Options::=--force-overwrite"
 REL="${REL:-$(awk -F'=' '/UBUNTU_CODENAME/ {print $2}' /etc/os-release)}"
 PLATFORM_ARCH=$(arch)
+PLATFORM="${PLATFORM:-}"
+GNTARGET=UBUNTU
+INIT_SETUP="${INIT_SETUP:-1}"
+DEBPATCH="${DEBPATCH:-}"
 LOCAL_MIRROR="${LOCAL_MIRROR:-}"
 ROOT_MIRROR="${ROOT_MIRROR:-}"
 REPO_MIRROR="${REPO_MIRROR:-}"
@@ -82,6 +102,191 @@ fi
 if [[ "x$KERNEL_FLAVOR" == "xazure" ]]; then
 	NETDRV=hv_netvsc
 fi
+
+function upgrade::grub()
+{
+    check=`cat /etc/default/grub | grep GNTARGET`
+    if [ "x$check" != "x" ]; then
+        return 0;
+    fi
+
+	util::info "init-grub"
+    case "$1"  in
+	*)
+	    # NOETH 환경에서 설치되도록 하기 위해 수정함.
+	    # NOETH 환경에서는 splash 설정이 존재하지 않음.
+    	#sed -i 's/splash/console=ttyS0,115200n8 net.ifnames=1 biosdevname=0 splash/g' /etc/default/grub
+        sed -i '/^GRUB_CMDLINE_LINUX=/c\GRUB_CMDLINE_LINUX="PLATFORM='"$PLATFORM"' GNTARGET='"$GNTARGET"' console=ttyS0,115200n8 console=tty net.ifnames=1 biosdevname=0"' /etc/default/grub
+        update-grub
+    	util::info "change grub PLATFORM=$PLATFORM GNTARGET=$GNTARGET console=ttyS0,115200n8 net.ifnames=1 biosdevname=0"
+		util::info "cat /etc/default/grub"
+		util::print_file "/etc/default/grub"
+	;;
+    esac
+}
+
+function makefilesystem()
+{
+    util::info "makefilesystem"
+    tdev="${1}1"
+    util::info "${1}"
+    util::info "tdev = ${tdev}"
+
+    # umount dev
+    check=`mount | grep $tdev`
+    if [ "x$check" != "x" ]; then
+        umount $tdev
+    fi
+
+    # MBR 제거
+    dd if=/dev/zero of=${1} count=1 bs=512
+
+    parted ${1} --script --align optimal mklabel gpt mkpart primary 1MiB 100%
+
+    mke2fs -t ext4 -j ${tdev}
+    tune2fs -i 0 -c 0 ${tdev}
+    e2label ${tdev} DATA
+
+    mkdir -p /media/DATA
+
+    check=`cat /etc/fstab | grep LABEL=DATA`
+    if [ "x$check" == "x" ]; then
+        fstab_cmd="LABEL=DATA /disk/data   ext4   defaults,discard,noatime,barrier=0        0"
+        echo $fstab_cmd >> /etc/fstab
+    fi
+
+    util::info "fstab_cmd = ${fstab_cmd}"
+    util::info "cat /etc/fstab"
+    util::print_file "/etc/fstab"
+}
+
+
+function makefilesystem_ssdev_directory()
+{
+    util::info "makefilesystem_ssdev_directory"
+    ssdev_dir="${1}"
+    target_dir="/disk/data/ssdev"
+
+    util::info ${ssdev_dir}
+    util::info ${target_dir}
+
+    mkdir -p ${ssdev_dir}
+    mkdir -p ${target_dir}
+
+    check=`cat /etc/fstab | grep $target_dir`
+    if [ "x$check" == "x" ]; then
+        fstab_cmd="${ssdev_dir} ${target_dir}   none   bind	0        0"
+        echo $fstab_cmd >> /etc/fstab
+    fi
+
+	util::info "fstab_cmd = ${fstab_cmd}"
+	util::info "cat /etc/fstab"
+	util::print_file "/etc/fstab"
+}
+
+function makefilesystem_ssdev()
+{
+    util::info "makefilesystem_ssdev"
+    tdev="${1}1"
+    util::info "${1}"
+    util::info "tdev = ${tdev}"
+
+    # umount dev
+    check=`mount | grep $tdev`
+    if [ "x$check" != "x" ]; then
+        umount $tdev
+    fi
+
+    # MBR 제거
+    dd if=/dev/zero of=${1} count=1 bs=512
+
+    parted ${1} --script --align optimal mklabel gpt mkpart primary 1MiB 100%
+
+    mke2fs -t ext4 -j ${tdev}
+    tune2fs -i 0 -c 0 ${tdev}
+    e2label ${tdev} SSDEV
+
+    check=`cat /etc/fstab | grep LABEL=SSDEV`
+    if [ "x$check" == "x" ]; then
+        fstab_cmd="LABEL=SSDEV /disk/data/ssdev   ext4   defaults,discard,noatime,barrier=0        0"
+        echo $fstab_cmd >> /etc/fstab
+    fi
+
+    util::info "fstab_cmd = ${fstab_cmd}"
+    util::info "cat /etc/fstab"
+	util::print_file "/etc/fstab"
+}
+
+
+function upgrade::storage()
+{
+    util::info "init-storage ${1}"
+
+    # 모델에 상관없이 생성함.
+    mkdir -p /disk/sys
+    mkdir -p /disk/data
+    mkdir -p /disk/data/ssdev
+
+    case "$1"  in
+	"C40"|"C50")
+	    util::info "C40, C50 format disk"
+	    util::info "mount ssdev directory"
+	    makefilesystem_ssdev_directory "/disk/ssdev"
+	    util::info "format sdb"
+	    makefilesystem "/dev/sdb"
+	    mount /dev/sdb1 /disk/data
+	    mount -o bind /disk/ssdev /disk/data/ssdev 
+	;;
+
+	"C10_R1"|"C20_R1"|"C30_R1"|"C40_R1"|"C50_R1"|"C40_R2"|"C50_R2"|"ES30_R2"|"ES50_R2"|"C50G_R1")
+	    util::info "C10_R1, C20_R1, C30_R1, C40_R1, C50_R1, C40_R2, C50_R2, ES30_R2, ES50_R2, C50G_R1 format disk"
+	    util::info "mount ssdev directory"
+	    makefilesystem_ssdev_directory "/disk/ssdev"
+	    util::info "format sdb"
+	    makefilesystem "/dev/sdb"
+	    mount /dev/sdb1 /disk/data
+	    mount -o bind /disk/ssdev /disk/data/ssdev 
+	;;
+
+	"C50G")
+	    util::info "C50G format disk"
+	    util::info "mount ssdev directory"
+	    makefilesystem_ssdev_directory "/disk/ssdev"
+	    util::info "format sdc"
+	    makefilesystem "/dev/sdc"
+	    mount /dev/sdc1 /disk/data
+	    mount -o bind /disk/ssdev /disk/data/ssdev 
+	;;
+
+
+	"ES30"|"ES30_R1"|"ES50"|"ES50_R1")
+	    umount /dev/sdb1
+	    umount /dev/sdc1
+	    util::info "ES30, ES30_R1, ES50, ES50_R1 format disk"
+	    util::info "format ssdev sdb"
+	    makefilesystem_ssdev "/dev/sdb"
+	    util::info "format sdc"
+	    makefilesystem "/dev/sdc"
+	    mount /dev/sdc1 /disk/data
+	    mount /dev/sdb1 /disk/data/ssdev
+	;;
+
+	*)
+	;;
+    esac
+}
+
+function upgrade::platform()
+{
+	util::info "init-platform"
+
+    echo "" >> /etc/bash.bashrc
+    echo "export PLATFORM=${PLATFORM}" >> /etc/bash.bashrc
+    echo "export GNTARGET=${GNTARGET}" >> /etc/bash.bashrc
+
+    util::info "mkdir -p ${INSTALL_DIR}"
+    mkdir -p ${INSTALL_DIR}
+}
 
 function util::ldconfig()
 {
@@ -277,14 +482,15 @@ function install::basepkg()
 		bridge-utils dmidecode \
 		nmap ntpdate net-tools libc-ares2 lrzsz \
 		sysstat libtalloc2 iproute2 ansible \
-		httrack lsb-release ca-certificates iw wireless-tools
+		httrack lsb-release ca-certificates iw wireless-tools smartmontools e2fsprogs \
+		parted
 
 	if [[ "x$CODENAME" == "xnoble" ]]; then
-		util::install_packages util-linux-extra libaio1t64 libtirpc-dev libncurses6 libtinfo6 libpcre3-dev libpcap0.8t64 libjsoncpp25 libldap2
+		util::install_packages util-linux-extra libaio1t64 libtirpc-dev libncurses6 libtinfo6 libpcre3-dev libpcap0.8t64 libjsoncpp25 libldap2 libparted2t64
 	elif [[ "x$CODENAME" == "xjammy" ]]; then
-		util::install_packages libaio1 dpkg-sig libncurses5 libpcap0.8 libjsoncpp25 libldap-2.5-0
+		util::install_packages libaio1 dpkg-sig libncurses5 libpcap0.8 libjsoncpp25 libldap-2.5-0 libparted2
 	else
-		util::install_packages libaio1 dpkg-sig libncurses5 libpcap0.8 libjsoncpp1 libldap-2.4-2
+		util::install_packages libaio1 dpkg-sig libncurses5 libpcap0.8 libjsoncpp1 libldap-2.4-2 libparted2
 	fi
 
 	if [[ "x$CODENAME" == "xbionic" ]]; then
@@ -670,6 +876,33 @@ function upgrade::config()
     fi
 }
 
+function fix::deb_components()
+{
+	local debfile="$1"
+
+	if [ ! -f "$debfile" ]; then
+		util::error "$debfile not found."
+		return 1
+	fi
+
+	local workdir
+	workdir=$(mktemp -d)
+	util::info "[*] Extracting $debfile to $workdir ..."
+	dpkg-deb -R "$debfile" "$workdir" || return 1
+	local target="$workdir/usr/geni/system-init_post.sh"
+	if [ -f "$target" ]; then
+		util::info "[*] Patching $target ..."
+		sed -i 's/^\(systemctl stop systemd-networkd\.service\)/# \1/' "$target"
+	else
+		util::error "Warning: $target not found in package"
+	fi
+
+	util::info "[*] Rebuilding deb package ..."
+	dpkg-deb -b "$workdir" "$debfile"
+	util::info "[*] Done. Modified package saved as $debfile"
+	rm -rf "$workdir"
+}
+
 function upgrade::nac()
 {
 	if [[ "x$INSTALLISO" != "x" ]]; then
@@ -688,9 +921,15 @@ function upgrade::nac()
 			rm $GDEB
 			exit -1
 		fi
+		if [ "x$DEBPATCH" != "x" ]; then
+			fix::deb_components $GDEB
+		fi
 		dpkg -i --force-overwrite $GDEB
 		rm $GDEB
 	else
+		if [ "x$DEBPATCH" != "x" ]; then
+			fix::deb_components $LOCALTARGET
+		fi
 		dpkg -i --force-overwrite $LOCALTARGET
 	fi
 
@@ -749,7 +988,13 @@ function upgrade::nac()
 		return 0
 	fi
 
-	if [[ "x$FACTORYINSTALL" != "x1" ]]; then
+	if [[ "x$PLATFORM" != "x" ]]; then
+		upgrade::platform $PLATFORM
+		upgrade::grub $PLATFORM
+		upgrade::storage $PLATFORM
+	fi
+
+	if [[ "x$FACTORYINSTALL" != "x1" ]] && [[ "x$INIT_SETUP" == "x1" ]]; then
 		# 표준 입력이 터미널인지 확인하고 재지정
 		if ! [ -t 0 ]; then
 			exec 0< /dev/tty || {
@@ -1268,6 +1513,9 @@ while [ "${1:-}" != "" ]; do
     -timezone )     shift
                     TIMEZONE=${1:-$TIMEZONE}
                     ;;
+    -platform )     shift
+                    PLATFORM=${1:-$PLATFORM}
+                    ;;
     -noprompt )     PROMPT=0
                     ;;
     -localmirror )  LOCAL_MIRROR=1
@@ -1325,6 +1573,7 @@ if [[ "x$FACTORYINSTALL" != "x1" && "x$KERNEL_FLAVOR" != "xaws" && "x$KERNEL_FLA
 fi
 
 util::info "TARGET=$TARGET"
+util::info "PLATFROM=$PLATFORM"
 util::info "FACTORYINSTALL=$FACTORYINSTALL"
 util::info "INSTALL=$INSTALL"
 util::info "UPGRADE=$UPGRADE"
@@ -1424,7 +1673,7 @@ elif [[ "x$DEB" == "xv6" || "x$DEB" == "xztna" ]]; then
 	else
 		DEB=$DEB/NAC-UBUNTUNS-R-current.${CODENAME}_${DPKGARCH}.deb
 	fi
-elif [[ "$DEB" != http* && "$DEB" != */* && ! -f "$DEB" ]]; then
+elif [[ "x$DEB" != "x" && "$DEB" != http* && "$DEB" != */* && ! -f "$DEB" ]]; then
 	NV=$(echo "$DEB" | grep -oP '\d+\.\d+\.\d+')
 	if [[ "$NV" == 6* ]]; then
 		DEB=https://d1s536j2uzv1h7.cloudfront.net/images/NAC/GNOS/v6.0/RELEASE/$NV/$DEB.${CODENAME}_${DPKGARCH}.deb
@@ -1459,7 +1708,7 @@ if [[ "$UPGRADE" == "1" || "$INSTALL" == "1" ]]; then
 				fi
 				DEBPKGCODENAME=`dpkg-deb --info $GDEB | grep Subarchitecture | awk -F ' ' '{print $2}'`
 				if [[ "x$DEBPKGCODENAME" != "x" ]] && [[ "$DEBPKGCODENAME" != "$CODENAME" ]]; then
-					echo "Ubuntu CodeName error. $DEBPKGCODENAME != $CODENAME"
+					util::error "Ubuntu CodeName. $DEBPKGCODENAME != $CODENAME"
 					rm $GDEB
 					exit -1
 				fi
@@ -1477,7 +1726,7 @@ if [[ "$UPGRADE" == "1" || "$INSTALL" == "1" ]]; then
 			if [[ -f "$LOCALTARGET" ]]; then
 				DEBPKGCODENAME=`dpkg-deb --info $LOCALTARGET | grep Subarchitecture | awk -F ' ' '{print $2}'`
 				if [[ "x$DEBPKGCODENAME" != "x" ]] && [[ "$DEBPKGCODENAME" != "$CODENAME" ]]; then
-					echo "Ubuntu CodeName error. $DEBPKGCODENAME != $CODENAME"
+					util::error "Ubuntu CodeName error. $DEBPKGCODENAME != $CODENAME"
 					exit -1
 				fi
 
@@ -1530,7 +1779,20 @@ if [[ "$UPGRADE" == "1" || "$INSTALL" == "1" ]]; then
 	apt remove -y landscape-common > /dev/null 2>&1
  	
   	# rm -rf /etc/apt/apt.conf.d/99insecure
- 
+
+	if [[ "x$BIN" = "x1" ]]; then
+		PROMPT=0 /etc/init.d/upgrade_kernel.sh
+	fi
+
+	chown root:root /usr/geni -R > /dev/null 2>&1
+	chown root:root /usr/raddb -R > /dev/null 2>&1
+	chown root:root /usr/db2 -R > /dev/null 2>&1
+	chown root:root /usr/nodejs -R > /dev/null 2>&1
+	chown root:root /usr/tomcat -R > /dev/null 2>&1
+	chown root:root /usr/httpd -R > /dev/null 2>&1
+	chown root:root /.version > /dev/null 2>&1
+	chown root:root /.build_date > /dev/null 2>&1
+
 	if [[ "x$FACTORYINSTALL" != "x1" ]]; then
 		sync
 		if [[ "$PROMPT" == "1" ]]; then
@@ -1540,6 +1802,10 @@ if [[ "$UPGRADE" == "1" || "$INSTALL" == "1" ]]; then
 				reboot -f
 			fi
 		elif [[ "x$FROMANSIBLE" == "x" ]]; then
+			echo ""
+			echo ""
+			printf "[*] Genians $TARGET installed. now reboot......"
+			sleep 5
 			reboot -f
 		fi
 	fi
