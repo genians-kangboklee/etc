@@ -1377,13 +1377,13 @@ function install::repo()
 		util::error "Failed to download Percona release package after $MAX_RETRIES attempts."
 		exit -1
 	fi
-	dpkg -i --force-overwrite ${TMP_DIR}/percona-release_latest.$(lsb_release -sc 2>/dev/null)_all.deb > /dev/null 2>&1
+	dpkg -i --force-overwrite ${TMP_DIR}/percona-release_latest.$(lsb_release -sc 2>/dev/null)_all.deb
 	if ! percona-release setup ps80 > /dev/null 2>&1; then
 		util::error "percona-release setup failed."
 		exit -1
 	fi
 
-	wget -4 --connect-timeout=$CONNECT_TIMEOUT --tries=$MAX_RETRIES --no-check-certificate -qO - https://artifacts.elastic.co/GPG-KEY-elasticsearch | apt-key add - 2>/dev/null
+	wget -4 --connect-timeout=$CONNECT_TIMEOUT --tries=$MAX_RETRIES --no-check-certificate -qO - https://artifacts.elastic.co/GPG-KEY-elasticsearch | apt-key add -
 	#echo "deb https://artifacts.elastic.co/packages/7.x/apt stable main" > /etc/apt/sources.list.d/elastic-7.x.list
 	echo "deb https://artifacts.elastic.co/packages/6.x/apt stable main" > /etc/apt/sources.list.d/elastic-6.x.list
 
@@ -1597,11 +1597,12 @@ if [[ "x$INSTALLISO" != "x" ]]; then
 	unset LD_LIBRARY_PATH
 fi
 
+util::update_apt
 util::reconfigure_dpkg
 util::fixbroken_apt
 util::update_apt
 #apt -y upgrade
-util::install_packages lsof net-tools lsb-release
+util::install_packages sudo wget gnupg2 lsof net-tools lsb-release
 
 if [[ "x$KERNEL_UPGRADE" != "x" ]]; then
 	upgrade::kernel "${KERNEL_UPGRADE}"
@@ -1774,7 +1775,7 @@ if [[ "$UPGRADE" == "1" || "$INSTALL" == "1" ]]; then
 		apt remove -y landscape-common > /dev/null 2>&1
 	fi
 
-	update-initramfs -u -k all
+	update-initramfs -u -k all > /dev/null 2>&1
 
 	apt remove -y landscape-common > /dev/null 2>&1
  	
