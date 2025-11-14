@@ -92,6 +92,7 @@ INSTALLISO="${INSTALLISO:-}"
 FROMANSIBLE="${FROMANSIBLE:-}"
 CONNECT_TIMEOUT="${CONNECT_TIMEOUT:-60}" # Default to 60 seconds (1 minutes)
 MAX_RETRIES="${MAX_RETRIES:-3}" # Default to 3 retry attempts
+DKBUILD="${DKBUILD:-}"
 
 if [[ "x$KERNEL_FLAVOR" == "xaws" || "x$KERNEL_FLAVOR" == "xazure" ]]; then
 	SSHALLALLOW=1
