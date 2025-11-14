@@ -1557,7 +1557,7 @@ CODENAME=$(util::getcodename)
 DPKGARCH=`dpkg --print-architecture`
 
 # 공장설치,aws,azure 설치가 아닌 경우에는 sourcelist 를 초기화
-if [[ "x$FACTORYINSTALL" != "x1" && "x$KERNEL_FLAVOR" != "xaws" && "x$KERNEL_FLAVOR" != "xazure" ]]; then
+if [[ "x$DKBUILD" != "x" || ( "x$FACTORYINSTALL" != "x1" && "x$KERNEL_FLAVOR" != "xaws" && "x$KERNEL_FLAVOR" != "xazure" ) ]]; then
 	# sourcelist 를 초기화 한다. bionic 에서 시작
 	init::sourcelist
 	# 현재 운영체제에 따라서 sourcelist 변경
@@ -1571,6 +1571,8 @@ if [[ "x$FACTORYINSTALL" != "x1" && "x$KERNEL_FLAVOR" != "xaws" && "x$KERNEL_FLA
 		upgrade::sourcelist "noble"
 	fi
 fi
+
+apt-get update
 
 util::info "TARGET=$TARGET"
 util::info "PLATFROM=$PLATFORM"
