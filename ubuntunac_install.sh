@@ -484,7 +484,7 @@ function install::basepkg()
 		nmap ntpdate net-tools libc-ares2 lrzsz \
 		sysstat libtalloc2 iproute2 ansible \
 		httrack lsb-release ca-certificates iw wireless-tools smartmontools e2fsprogs \
-		parted
+		parted tzdata
 
 	if [[ "x$CODENAME" == "xnoble" ]]; then
 		util::install_packages util-linux-extra libaio1t64 libtirpc-dev libncurses6 libtinfo6 libpcre3-dev libpcap0.8t64 libjsoncpp25 libldap2 libparted2t64
