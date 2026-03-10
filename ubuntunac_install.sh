@@ -51,6 +51,9 @@ systemctl stop unattended-upgrades.service > /dev/null 2>&1
 systemctl disable unattended-upgrades.service > /dev/null 2>&1
 systemctl stop apt-daily.timer > /dev/null 2>&1
 systemctl disable apt-daily.timer > /dev/null 2>&1
+rm -rf /var/lib/dpkg/lock-frontend > /dev/null 2>&1
+rm -rf /var/lib/apt/lists/lock > /dev/null 2>&1
+rm -rf /var/cache/apt/archives/lock > /dev/null 2>&1
 
 echo 'Acquire::https::Verify-Peer "false";' | tee /etc/apt/apt.conf.d/99insecure
 
