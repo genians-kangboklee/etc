@@ -46,6 +46,10 @@ else
 	PROMPT=0
 fi
 
+util::info "Stop unattended upgrade service"
+systemctl stop unattended-upgrades.service
+systemctl disable unattended-upgrades.service
+
 echo 'Acquire::https::Verify-Peer "false";' | tee /etc/apt/apt.conf.d/99insecure
 
 LOGFILE=/var/log/nac_install.log
