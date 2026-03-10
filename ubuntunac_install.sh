@@ -1384,7 +1384,7 @@ function install::repo()
 		exit -1
 	fi
 
-	wget -4 --connect-timeout=$CONNECT_TIMEOUT --tries=$MAX_RETRIES --no-check-certificate -qO - https://artifacts.elastic.co/GPG-KEY-elasticsearch | apt-key add -
+	wget -4 --connect-timeout=$CONNECT_TIMEOUT --tries=$MAX_RETRIES --no-check-certificate -qO - https://artifacts.elastic.co/GPG-KEY-elasticsearch | apt-key add - 2>/dev/null
 	#echo "deb https://artifacts.elastic.co/packages/7.x/apt stable main" > /etc/apt/sources.list.d/elastic-7.x.list
 	echo "deb https://artifacts.elastic.co/packages/6.x/apt stable main" > /etc/apt/sources.list.d/elastic-6.x.list
 
@@ -1663,14 +1663,14 @@ if [[ "$UPGRADE" == "1" && "x$REL" != "x$CODENAME" ]]; then
 	exit -1
 fi
 
-if [[ "x$DEB" == "xv5" || "x$DEB" == "xnac" ]]; then
+if [[ "x$DEB" == "xv5" || "x$DEB" == "xnac" || "x$DEB" == "xnac5" ]]; then
 	DEB=https://d1s536j2uzv1h7.cloudfront.net/images/NAC/GNOS/v5.0/RELEASE
 	if [ "x$TARGET" = "xGPC" ]; then
 		DEB=$DEB/NAC-UBUNTU-R-current.${CODENAME}_${DPKGARCH}.deb
 	else
 		DEB=$DEB/NAC-UBUNTUNS-R-current.${CODENAME}_${DPKGARCH}.deb
 	fi
-elif [[ "x$DEB" == "xv6" || "x$DEB" == "xztna" ]]; then
+elif [[ "x$DEB" == "xv6" || "x$DEB" == "xztna" || "x$DEB" == "xnac6" ]]; then
 	DEB=https://d1s536j2uzv1h7.cloudfront.net/images/NAC/GNOS/v6.0/RELEASE
 	if [ "x$TARGET" = "xGPC" ]; then
 		DEB=$DEB/NAC-UBUNTU-R-current.${CODENAME}_${DPKGARCH}.deb
