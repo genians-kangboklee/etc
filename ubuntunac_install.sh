@@ -47,8 +47,10 @@ else
 fi
 
 util::info "Stop unattended upgrade service"
-systemctl stop unattended-upgrades.service
-systemctl disable unattended-upgrades.service
+systemctl stop unattended-upgrades.service > /dev/null 2>&1
+systemctl disable unattended-upgrades.service > /dev/null 2>&1
+systemctl stop apt-daily.timer > /dev/null 2>&1
+systemctl disable apt-daily.timer > /dev/null 2>&1
 
 echo 'Acquire::https::Verify-Peer "false";' | tee /etc/apt/apt.conf.d/99insecure
 
