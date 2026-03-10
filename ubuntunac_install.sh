@@ -49,8 +49,13 @@ fi
 util::info "Stop unattended upgrade service"
 systemctl stop unattended-upgrades.service > /dev/null 2>&1
 systemctl disable unattended-upgrades.service > /dev/null 2>&1
+systemctl mask unattended-upgrades.service > /dev/null 2>&1
 systemctl stop apt-daily.timer > /dev/null 2>&1
 systemctl disable apt-daily.timer > /dev/null 2>&1
+systemctl stop apt-daily.timer apt-daily-upgrade.timer > /dev/null 2>&1
+systemctl disable apt-daily.timer apt-daily-upgrade.timer > /dev/null 2>&1
+systemctl mask apt-daily.timer apt-daily-upgrade.timer > /dev/null 2>&1
+
 util::info "Remove unattended upgrade service"
 rm -rf /var/lib/dpkg/lock-frontend > /dev/null 2>&1
 rm -rf /var/lib/apt/lists/lock > /dev/null 2>&1
